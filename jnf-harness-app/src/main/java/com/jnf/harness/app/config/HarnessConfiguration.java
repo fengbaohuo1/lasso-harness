@@ -103,10 +103,44 @@ public class HarnessConfiguration {
     }
 
     @Bean
-    public ToolRunner toolRunner(ToolRegistry toolRegistry) {
-        return new ToolCallExecutor(toolRegistry, List.of(), null,
+    public com.jnf.harness.domain.tool.service.ToolHookRegistry toolHookRegistry() {
+        return new com.jnf.harness.domain.tool.service.ToolHookRegistry();
+    }
+
+    @Bean
+    public ToolRunner toolRunner(ToolRegistry toolRegistry,
+                                 com.jnf.harness.domain.tool.service.ToolHookRegistry hookRegistry) {
+        return new ToolCallExecutor(toolRegistry, List.of(hookRegistry), null,
                 new DefaultToolRunContext("agent", "session",
                         Path.of("").toAbsolutePath().toString()), 300, 10);
+    }
+
+    // ---------------- 第 9 节：插件体系 ----------------
+
+    @Bean
+    public com.jnf.harness.spi.PluginEventBus pluginEventBus() {
+        return new com.jnf.harness.domain.plugin.InMemoryPluginEventBus();
+    }
+
+    @Bean
+    public com.jnf.harness.spi.PluginConfigStore pluginConfigStore() {
+        return new com.jnf.harness.domain.plugin.InMemoryPluginConfigStore();
+    }
+
+    @Bean
+    public com.jnf.harness.domain.plugin.IPluginLoaderPort pluginLoader() {
+        return new com.jnf.harness.infrastructure.adapter.plugin.JavaPluginLoader();
+    }
+
+    @Bean
+    public com.jnf.harness.domain.plugin.PluginHost pluginHost(
+            com.jnf.harness.domain.plugin.IPluginLoaderPort loader,
+            ToolRegistry toolRegistry, SystemPromptAssembler promptAssembler,
+            com.jnf.harness.domain.tool.service.ToolHookRegistry hookRegistry,
+            com.jnf.harness.spi.PluginEventBus eventBus,
+            com.jnf.harness.spi.PluginConfigStore configStore) {
+        return new com.jnf.harness.domain.plugin.PluginHost(loader, toolRegistry,
+                promptAssembler, hookRegistry, eventBus, configStore);
     }
 
     @Bean
