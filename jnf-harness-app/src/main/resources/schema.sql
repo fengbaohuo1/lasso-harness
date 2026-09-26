@@ -118,6 +118,29 @@ CREATE TABLE IF NOT EXISTS harness_goal_state (
     updated_at     TIMESTAMP(3)
 );
 
+-- 数字人注册表（第 13 节：身份与连接解耦）
+CREATE TABLE IF NOT EXISTS digital_human (
+    id              VARCHAR(64) PRIMARY KEY,
+    display_name    VARCHAR(128),
+    purpose         VARCHAR(255),
+    role_tags       VARCHAR(255),
+    approval_policy VARCHAR(32) DEFAULT 'WRITE_REQUIRES_APPROVAL',
+    created_at      TIMESTAMP(3)
+);
+
+CREATE TABLE IF NOT EXISTS digital_human_endpoint (
+    id               VARCHAR(64) PRIMARY KEY,
+    digital_human_id VARCHAR(64),
+    endpoint_type    VARCHAR(32),
+    base_url         VARCHAR(255),
+    credential_ref   VARCHAR(128),
+    protocol_version VARCHAR(32),
+    agent_card       TEXT,
+    health_state     VARCHAR(16) DEFAULT 'unknown',
+    last_checked_at  TIMESTAMP(3)
+);
+CREATE INDEX IF NOT EXISTS idx_dh_endpoint_human ON digital_human_endpoint (digital_human_id);
+
 -- 工具目录种子（11 个内置工具；幂等）
 INSERT INTO harness_tool_catalog (tool_code, display_name, description, category, requires_approval)
 SELECT 'fs_read', '读取文件', '读取文件内容', 'fs', FALSE FROM DUAL

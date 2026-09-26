@@ -138,6 +138,25 @@ public class HarnessConfiguration {
                         Path.of(".").toAbsolutePath(), command));
     }
 
+    // ---------------- 第 13 节：开放协议与数字人 ----------------
+
+    @Bean
+    public com.jnf.harness.domain.acp.A2aTaskService a2aTaskService() {
+        return new com.jnf.harness.domain.acp.A2aTaskService();
+    }
+
+    @Bean
+    public com.jnf.harness.domain.digitalhuman.DigitalHumanService digitalHumanService(
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new com.jnf.harness.domain.digitalhuman.DigitalHumanService(
+                new com.jnf.harness.infrastructure.adapter.setting.DigitalHumanRepository(jdbc));
+    }
+
+    @Bean
+    public com.jnf.harness.infrastructure.adapter.web.RemoteAgentDiscoveryService remoteAgentDiscoveryService() {
+        return new com.jnf.harness.infrastructure.adapter.web.RemoteAgentDiscoveryService();
+    }
+
     // ---------------- 第 12 节：goal / jobs / schedule / plan（R7 持久化） ----------------
 
     @Bean
