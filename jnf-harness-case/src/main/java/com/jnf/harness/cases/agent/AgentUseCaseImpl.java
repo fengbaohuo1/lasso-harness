@@ -6,6 +6,8 @@ import com.jnf.harness.api.dto.AgentMessageCommand;
 import com.jnf.harness.api.dto.AgentMessageResult;
 import com.jnf.harness.api.response.Response;
 import com.jnf.harness.api.stream.AgentStreamSink;
+import com.jnf.harness.cases.agent.factory.AgentMessageFactory;
+import com.jnf.harness.cases.orchestration.DynamicContext;
 import com.jnf.harness.domain.agent.service.Inbox;
 import com.jnf.harness.domain.agent.service.run.AgentEventListener;
 import com.jnf.harness.domain.agent.service.run.AgentRunFactory;
@@ -14,29 +16,30 @@ import com.jnf.harness.domain.session.event.TurnEndReason;
 import com.jnf.harness.model.ToolCallBlock;
 import com.jnf.harness.model.ToolExecutionResult;
 
-import java.util.concurrent.TimeUnit;
-
 /**
- * Agent 用例（薄用例形态）：命令校验 + 领域服务委托。
- * <p>第 7 节将对话链改造成策略树（Resolve→Intent→Dispatch→Collect）时保持本类对外签名不变。
+ * Agent 用例：第 7 节起对话链走策略树（Resolve→Intent→Dispatch→Collect），对外签名不变。
  */
 public class AgentUseCaseImpl implements IAgentApi, IAgentStreamApi {
 
     private static final long SEND_TIMEOUT_SECONDS = 300;
 
-    private final AgentRunFactory factory;
+    private final AgentMessageFactory messageFactory;
+    private final AgentRunFactory agentRunFactory;
 
-    public AgentUseCaseImpl(AgentRunFactory factory) {
-        this.factory = factory;
+    public AgentUseCaseImpl(AgentRunFactory agentRunFactory) {
+        this.messageFactory = new AgentMessageFactory(agentRunFactory);
+        this.agentRunFactory = agentRunFactory;
     }
 
     @Override
     public Response<AgentMessageResult> send(AgentMessageCommand command) {
         try {
-            ReactLoopAgent agent = factory.getOrCreate(command.agentId(), null);
-            Inbox.TurnSummary summary = agent.ask(command.message())
-                    .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            return Response.success(toResult(summary));
+            DynamicContext context = messageFactory.run(command, null, SEND_TIMEOUT_SECONDS);
+            String error = context.get("error", String.class);
+            if (error != null) {
+                return Response.internalError("对话失败: " + error);
+            }
+            return Response.success(toResult(context.get("summary", Inbox.TurnSummary.class)));
         } catch (IllegalArgumentException e) {
             return Response.invalidArgument(e.getMessage());
         } catch (Exception e) {
@@ -46,7 +49,7 @@ public class AgentUseCaseImpl implements IAgentApi, IAgentStreamApi {
 
     @Override
     public Response<AgentMessageResult> status(String agentId) {
-        return factory.get(agentId)
+        return agentRunFactory.get(agentId)
                 .map(agent -> Response.success(new AgentMessageResult(
                         agentId, 0, agent.phase().getClass().getSimpleName().toUpperCase(),
                         "", (int) agent.meter().llmCalls())))
@@ -56,7 +59,7 @@ public class AgentUseCaseImpl implements IAgentApi, IAgentStreamApi {
 
     @Override
     public Response<Void> cancel(String agentId) {
-        factory.get(agentId).ifPresent(ReactLoopAgent::cancel);
+        agentRunFactory.get(agentId).ifPresent(ReactLoopAgent::cancel);
         return Response.success(null);
     }
 
@@ -84,22 +87,29 @@ public class AgentUseCaseImpl implements IAgentApi, IAgentStreamApi {
 
             @Override
             public void onTurnEnd(Inbox.TurnSummary summary) {
+                if (summary.reason() == TurnEndReason.ERROR) {
+                    // 错误终态走 onError，不发 done（终态唯一）
+                    return;
+                }
                 sink.onFinish(summary.turn());
                 sink.onDone(summary.agentId(), summary.turn(), summary.reason().name(),
                         summary.lastAssistantText(), toolCalls);
             }
         };
-        try {
-            ReactLoopAgent agent = factory.getOrCreate(command.agentId(), null);
-            agent.ask(command.message(), listener)
-                    .whenComplete((summary, error) -> {
-                        if (error != null) {
-                            sink.onError("TURN_ERROR", rootMessage(error));
-                        }
-                    });
-        } catch (Exception e) {
-            sink.onError("STREAM_ERROR", rootMessage(e));
-        }
+        // 流式路径：策略树异步执行（Collect 阻塞不占请求线程）
+        Thread worker = new Thread(() -> {
+            try {
+                DynamicContext context = messageFactory.run(command, listener, SEND_TIMEOUT_SECONDS);
+                String error = context.get("error", String.class);
+                if (error != null) {
+                    sink.onError("TURN_ERROR", error);
+                }
+            } catch (Exception e) {
+                sink.onError("STREAM_ERROR", rootMessage(e));
+            }
+        }, "agent-stream-" + command.agentId());
+        worker.setDaemon(true);
+        worker.start();
     }
 
     private AgentMessageResult toResult(Inbox.TurnSummary summary) {
