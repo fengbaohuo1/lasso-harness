@@ -143,12 +143,48 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.sandbox.SandboxGuardHook sandboxGuardHook(
+            @Value("${harness.sandbox.mode:WORKSPACE_WRITE}") String mode) {
+        return new com.jnf.harness.domain.sandbox.SandboxGuardHook(
+                com.jnf.harness.domain.sandbox.SandboxMode.from(mode),
+                Path.of("").toAbsolutePath());
+    }
+
+    @Bean
     public ToolRunner toolRunner(ToolRegistry toolRegistry,
                                  com.jnf.harness.domain.tool.service.ToolHookRegistry hookRegistry,
-                                 com.jnf.harness.domain.task.approval.RuntimeApprovalGate approvalGate) {
-        return new ToolCallExecutor(toolRegistry, List.of(hookRegistry), approvalGate,
+                                 com.jnf.harness.domain.task.approval.RuntimeApprovalGate approvalGate,
+                                 com.jnf.harness.domain.sandbox.SandboxGuardHook sandboxGuardHook) {
+        return new ToolCallExecutor(toolRegistry, List.of(sandboxGuardHook, hookRegistry), approvalGate,
                 new DefaultToolRunContext("agent", "session",
                         Path.of("").toAbsolutePath().toString()), 300, 10);
+    }
+
+    // ---------------- 第 10 节收尾：任务五子域 ----------------
+
+    @Bean
+    public com.jnf.harness.domain.task.IHarnessTaskQueueRepository harnessTaskQueueRepository(
+            com.jnf.harness.infrastructure.dao.HarnessTaskDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.setting.HarnessTaskRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.task.HarnessExecutionService harnessExecutionService(
+            com.jnf.harness.domain.task.IHarnessTaskQueueRepository queue,
+            AgentRunFactory agentRunFactory) {
+        return new com.jnf.harness.domain.task.HarnessExecutionService(queue, agentRunFactory);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.task.TaskSubmitService taskSubmitService(
+            com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
+            com.jnf.harness.domain.task.IHarnessTaskQueueRepository queue,
+            com.jnf.harness.domain.task.HarnessExecutionService execution) {
+        return new com.jnf.harness.domain.task.TaskSubmitService(
+                new com.jnf.harness.domain.task.TaskSubmissionPolicyService(toolCatalogPort),
+                new com.jnf.harness.domain.task.PermissionPolicyService(toolCatalogPort),
+                new com.jnf.harness.domain.task.ApprovalPolicyService(),
+                queue, execution);
     }
 
     // ---------------- 第 9 节：插件体系 ----------------
