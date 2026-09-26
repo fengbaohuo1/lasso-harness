@@ -1,0 +1,48 @@
+package com.jnf.harness.domain.session.event;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 会话事件（sealed 封闭家族）：会话 = 事件日志，一切状态可由事件重放重建。
+ */
+public sealed interface SessionEvent
+        permits SessionEvent.TurnStart, SessionEvent.TurnEnd,
+        SessionEvent.StepStart, SessionEvent.StepEnd,
+        SessionEvent.UserMessage, SessionEvent.AssistantChunk, SessionEvent.AssistantMessage,
+        SessionEvent.ToolCall, SessionEvent.ToolResult, SessionEvent.Compacted {
+
+    record TurnStart(long turn) implements SessionEvent {
+    }
+
+    record TurnEnd(long turn, TurnEndReason reason, String detail) implements SessionEvent {
+    }
+
+    record StepStart(long turn, long step) implements SessionEvent {
+    }
+
+    record StepEnd(long turn, long step) implements SessionEvent {
+    }
+
+    record UserMessage(long turn, long step, String text) implements SessionEvent {
+    }
+
+    /** 文本流增量（仅 UI 呈现用；重放以 AssistantMessage 为准）。 */
+    record AssistantChunk(long turn, long step, String text) implements SessionEvent {
+    }
+
+    record AssistantMessage(long turn, long step, String text) implements SessionEvent {
+    }
+
+    record ToolCall(long turn, long step, String callId, String name,
+                    Map<String, Object> arguments) implements SessionEvent {
+    }
+
+    record ToolResult(long turn, long step, String callId, String name,
+                      boolean error, String content) implements SessionEvent {
+    }
+
+    /** 压缩事件：summary 概括 sourceSeqs 范围的历史（见压缩引擎）。 */
+    record Compacted(String summary, List<Long> sourceSeqs) implements SessionEvent {
+    }
+}
