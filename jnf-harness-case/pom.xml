@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.jnf.harness</groupId>
+    <artifactId>jnf-harness</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>jnf-harness-case</artifactId>
+  <name>jnf-harness-case</name>
+  <description>用例编排层：薄用例 *CaseImpl + 流程用例 factory/node 策略树（不依赖 infrastructure）</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-domain</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-tx</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.yaml</groupId>
+      <artifactId>snakeyaml</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
