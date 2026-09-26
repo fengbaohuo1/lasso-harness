@@ -144,6 +144,26 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.plugin.registry.IPluginInstallationRepository pluginInstallationRepository(
+            com.jnf.harness.infrastructure.dao.PluginInstallationDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.plugin.PluginInstallationRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.plugin.INodePluginLoaderPort nodePluginLoader() {
+        return new com.jnf.harness.infrastructure.adapter.plugin.NodePluginLoader();
+    }
+
+    @Bean
+    public com.jnf.harness.domain.plugin.registry.PluginRegistryService pluginRegistryService(
+            com.jnf.harness.domain.plugin.registry.IPluginInstallationRepository repository,
+            com.jnf.harness.domain.plugin.PluginHost pluginHost,
+            com.jnf.harness.domain.plugin.INodePluginLoaderPort nodePluginLoader) {
+        return new com.jnf.harness.domain.plugin.registry.PluginRegistryService(
+                repository, pluginHost, nodePluginLoader);
+    }
+
+    @Bean
     public SystemPromptAssembler systemPromptAssembler() {
         SystemPromptAssembler assembler = new SystemPromptAssembler();
         assembler.registerSection(new SystemPromptAssembler.PromptSection("base", 0,

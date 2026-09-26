@@ -49,9 +49,13 @@ public class PluginHost {
         this.configStore = configStore;
     }
 
-    /** 激活插件（加载 + configure + onStart）；失败回滚并置 FAILED。 */
+    /** 激活 Java 插件制品（加载 + configure + onStart）；失败回滚并置 FAILED。 */
     public synchronized void activate(Path artifact) {
-        IPluginLoaderPort.LoadedPlugin loaded = loader.load(artifact);
+        activateLoaded(loader.load(artifact));
+    }
+
+    /** 激活已加载的插件（Java/Node/MCP 同构入口）；失败回滚并置 FAILED。 */
+    public synchronized void activateLoaded(IPluginLoaderPort.LoadedPlugin loaded) {
         String pluginId = loaded.manifest().id();
         if (active.containsKey(pluginId)) {
             throw new IllegalStateException("插件已激活: " + pluginId);

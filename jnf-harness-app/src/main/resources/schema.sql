@@ -39,6 +39,38 @@ CREATE TABLE IF NOT EXISTS harness_task (
 );
 CREATE INDEX IF NOT EXISTS idx_harness_task_session ON harness_task (session_id);
 
+-- 插件三表（第 9 节）
+CREATE TABLE IF NOT EXISTS harness_plugin_installation (
+    plugin_id      VARCHAR(64)  PRIMARY KEY,
+    display_name   VARCHAR(128),
+    plugin_version VARCHAR(32),
+    runtime_type   VARCHAR(32)  NOT NULL,
+    source_path    VARCHAR(512),
+    entrypoint     VARCHAR(255),
+    status         VARCHAR(32)  NOT NULL,
+    installed_at   TIMESTAMP(3)
+);
+
+CREATE TABLE IF NOT EXISTS harness_plugin_runtime_binding (
+    plugin_id        VARCHAR(64) PRIMARY KEY,
+    package_type     VARCHAR(32),
+    manifest_path    VARCHAR(512),
+    working_directory VARCHAR(512),
+    runtime_command  VARCHAR(512),
+    bridge_ready     BOOLEAN NOT NULL DEFAULT FALSE,
+    message          TEXT,
+    checked_at       TIMESTAMP(3)
+);
+
+CREATE TABLE IF NOT EXISTS harness_plugin_config (
+    plugin_id    VARCHAR(64)  NOT NULL,
+    config_key   VARCHAR(128) NOT NULL,
+    config_layer VARCHAR(32)  NOT NULL DEFAULT 'default',
+    config_value TEXT,
+    updated_at   TIMESTAMP(3),
+    PRIMARY KEY (plugin_id, config_key, config_layer)
+);
+
 -- 工具目录种子（11 个内置工具；幂等）
 INSERT INTO harness_tool_catalog (tool_code, display_name, description, category, requires_approval)
 SELECT 'fs_read', '读取文件', '读取文件内容', 'fs', FALSE FROM DUAL

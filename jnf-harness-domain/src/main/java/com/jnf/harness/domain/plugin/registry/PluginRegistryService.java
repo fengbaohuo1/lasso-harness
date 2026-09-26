@@ -1,0 +1,96 @@
+package com.jnf.harness.domain.plugin.registry;
+
+import com.jnf.harness.domain.plugin.PluginHost;
+import com.jnf.harness.spi.PluginLifecycleState;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * 插件注册服务：install（登记）→ activate（加载运行）→ disable/uninstall。
+ * <p>状态列与运行态对齐：REGISTERED / ACTIVE / FAILED / DISABLED。
+ */
+public class PluginRegistryService {
+
+    public static final String RUNTIME_JAVA_NATIVE = "JAVA_NATIVE";
+    public static final String RUNTIME_NODE_BRIDGE = "DSH_NODE_BRIDGE";
+
+    private final IPluginInstallationRepository repository;
+    private final PluginHost pluginHost;
+    private final com.jnf.harness.domain.plugin.INodePluginLoaderPort nodeLoader;
+
+    public PluginRegistryService(IPluginInstallationRepository repository, PluginHost pluginHost,
+                                 com.jnf.harness.domain.plugin.INodePluginLoaderPort nodeLoader) {
+        this.repository = repository;
+        this.pluginHost = pluginHost;
+        this.nodeLoader = nodeLoader;
+    }
+
+    /** 登记插件（制品必须已存在）。 */
+    public PluginInstallationEntity install(PluginInstallationEntity entity) {
+        if (entity.pluginId() == null || entity.pluginId().isBlank()) {
+            throw new IllegalArgumentException("pluginId 必填");
+        }
+        if (entity.sourcePath() == null || !Files.exists(Path.of(entity.sourcePath()))) {
+            throw new IllegalArgumentException("制品不存在: " + entity.sourcePath());
+        }
+        PluginInstallationEntity record = new PluginInstallationEntity(
+                entity.pluginId().trim(), entity.displayName(), entity.pluginVersion(),
+                entity.runtimeType() == null ? RUNTIME_JAVA_NATIVE : entity.runtimeType(),
+                entity.sourcePath(), entity.entrypoint(), PluginLifecycleState.REGISTERED.name());
+        repository.upsert(record);
+        return record;
+    }
+
+    /** 激活（加载 + 注册工具/提示词/Hook）；按 runtimeType 走 Java / Node 通道。 */
+    public void activate(String pluginId) {
+        PluginInstallationEntity record = require(pluginId);
+        try {
+            if (RUNTIME_NODE_BRIDGE.equalsIgnoreCase(record.runtimeType())) {
+                if (nodeLoader == null) {
+                    throw new IllegalStateException("Node Bridge 未启用");
+                }
+                pluginHost.activateLoaded(nodeLoader.load(
+                        Path.of(record.sourcePath()), record.entrypoint(), pluginId));
+            } else {
+                pluginHost.activate(Path.of(record.sourcePath()));
+            }
+        } catch (RuntimeException e) {
+            repository.updateStatus(pluginId, PluginLifecycleState.FAILED.name());
+            throw e;
+        }
+        repository.updateStatus(pluginId, PluginLifecycleState.ACTIVE.name());
+    }
+
+    /** 停用（逆序回收贡献项）。 */
+    public void disable(String pluginId) {
+        pluginHost.disable(pluginId);
+        repository.updateStatus(pluginId, PluginLifecycleState.DISABLED.name());
+    }
+
+    /** 卸载：停用 + 删记录。 */
+    public void uninstall(String pluginId) {
+        pluginHost.disable(pluginId);
+        repository.delete(pluginId);
+    }
+
+    public List<PluginInstallationEntity> list() {
+        return repository.findAll();
+    }
+
+    public Optional<PluginInstallationEntity> get(String pluginId) {
+        return repository.findById(pluginId);
+    }
+
+    /** 实际运行状态（以宿主为准）。 */
+    public PluginLifecycleState runtimeState(String pluginId) {
+        return pluginHost.stateOf(pluginId);
+    }
+
+    private PluginInstallationEntity require(String pluginId) {
+        return repository.findById(pluginId)
+                .orElseThrow(() -> new IllegalArgumentException("插件未安装: " + pluginId));
+    }
+}
