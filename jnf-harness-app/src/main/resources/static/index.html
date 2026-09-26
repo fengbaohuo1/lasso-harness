@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jnf-harness 控制台</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <h1>jnf-harness</h1>
+    <div class="controls">
+      <label>Agent <input id="agentId" value="console-agent"></label>
+      <label>API Key <input id="apiKey" type="password" placeholder="留空=无鉴权"></label>
+      <button id="cancelBtn" disabled>停止生成</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="chat">
+      <div id="messages"></div>
+      <div id="composer">
+        <textarea id="input" placeholder="输入消息，Enter 发送 / Shift+Enter 换行"></textarea>
+        <button id="sendBtn">发送</button>
+      </div>
+    </section>
+
+    <aside id="side">
+      <div class="panel">
+        <h2>运行期审批</h2>
+        <div id="approvals"><p class="muted">（无待审批）</p></div>
+      </div>
+      <div class="panel">
+        <h2>历史回放</h2>
+        <select id="sessionSelect"><option value="">-- 选择会话 --</option></select>
+        <button id="replayBtn">回放</button>
+        <div id="replayStatus" class="muted"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

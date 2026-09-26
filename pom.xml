@@ -103,6 +103,8 @@
           <configuration>
             <release>${maven.compiler.release}</release>
             <encoding>${project.build.sourceEncoding}</encoding>
+            <!-- Spring @PathVariable/@RequestParam 参数名解析依赖 -->
+            <parameters>true</parameters>
           </configuration>
         </plugin>
         <plugin>

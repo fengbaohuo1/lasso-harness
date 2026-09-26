@@ -67,6 +67,22 @@ public class JsonlSessionEventStore implements ISessionEventStore {
         return entries;
     }
 
+    @Override
+    public List<String> listSessionIds() {
+        if (!Files.isDirectory(root)) {
+            return List.of();
+        }
+        List<String> ids = new ArrayList<>();
+        try (var dirs = Files.list(root)) {
+            dirs.filter(Files::isDirectory)
+                    .filter(dir -> Files.exists(dir.resolve("events.jsonl")))
+                    .forEach(dir -> ids.add(dir.getFileName().toString()));
+        } catch (IOException e) {
+            throw new IllegalStateException("会话目录枚举失败", e);
+        }
+        return ids;
+    }
+
     private Path sessionFile(String sessionId) {
         return root.resolve(sessionId).resolve("events.jsonl");
     }
