@@ -10,7 +10,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 远端工具定义：调用转发给 {@link IRemoteToolBridge}（Node/MCP 同用）。
  */
-record RemoteToolDefinition(IRemoteToolBridge bridge, IRemoteToolBridge.RemoteTool remote)
+public record RemoteToolDefinition(IRemoteToolBridge bridge, IRemoteToolBridge.RemoteTool remote)
         implements ToolDefinition {
 
     @Override

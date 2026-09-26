@@ -20,17 +20,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Node sidecar 桥：stdin/stdout 换行分隔 JSON-RPC 2.0。
- * <p>最小方法面：initialize / notifications/initialized / tools/list / tools/call。
- * <p>入口限定在插件安装目录内的 .js/.mjs/.cjs（防注入）。
+ * 通用 JSON-RPC stdio 桥：Node sidecar 与 MCP stdio server 共用。
+ * <p>换行分隔 JSON-RPC 2.0；最小方法面：initialize / notifications/initialized /
+ * tools/list / tools/call。
  */
-public class NodeSidecarBridge implements IRemoteToolBridge {
+public class JsonRpcStdioBridge implements IRemoteToolBridge {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final long REQUEST_TIMEOUT_SECONDS = 30;
 
-    private final Path pluginDir;
-    private final Path entrypoint;
+    private final Path workdir;
+    private final List<String> command;
     private final AtomicLong nextId = new AtomicLong(1);
     private final Map<Long, CompletableFuture<JsonNode>> pending = new ConcurrentHashMap<>();
 
@@ -38,17 +38,12 @@ public class NodeSidecarBridge implements IRemoteToolBridge {
     private OutputStream stdin;
     private Thread reader;
 
-    public NodeSidecarBridge(Path pluginDir, String entrypointName) {
-        this.pluginDir = pluginDir.toAbsolutePath().normalize();
-        Path resolved = this.pluginDir.resolve(entrypointName).normalize();
-        if (!resolved.startsWith(this.pluginDir)) {
-            throw new IllegalArgumentException("入口必须位于插件目录内: " + entrypointName);
+    public JsonRpcStdioBridge(Path workdir, List<String> command) {
+        if (command == null || command.isEmpty()) {
+            throw new IllegalArgumentException("command 必填");
         }
-        String fileName = resolved.getFileName().toString();
-        if (!(fileName.endsWith(".js") || fileName.endsWith(".mjs") || fileName.endsWith(".cjs"))) {
-            throw new IllegalArgumentException("入口必须是 .js/.mjs/.cjs: " + entrypointName);
-        }
-        this.entrypoint = resolved;
+        this.workdir = workdir;
+        this.command = List.copyOf(command);
     }
 
     @Override
@@ -57,19 +52,18 @@ public class NodeSidecarBridge implements IRemoteToolBridge {
             return;
         }
         try {
-            process = new ProcessBuilder("node", entrypoint.toString())
-                    .directory(pluginDir.toFile())
-                    .redirectErrorStream(false)
+            process = new ProcessBuilder(command)
+                    .directory(workdir == null ? null : workdir.toFile())
                     .start();
             stdin = process.getOutputStream();
-            reader = new Thread(this::readLoop, "node-sidecar-reader");
+            reader = new Thread(this::readLoop, "jsonrpc-stdio-reader");
             reader.setDaemon(true);
             reader.start();
             request("initialize", MAPPER.createObjectNode().put("protocolVersion", "2024-11-05"));
             notify("notifications/initialized", MAPPER.createObjectNode());
         } catch (Exception e) {
             stop();
-            throw new IllegalStateException("Node sidecar 启动失败: " + e.getMessage(), e);
+            throw new IllegalStateException("sidecar 启动失败: " + e.getMessage(), e);
         }
     }
 
@@ -163,8 +157,7 @@ public class NodeSidecarBridge implements IRemoteToolBridge {
 
     private void readLoop() {
         try (BufferedReader in = new BufferedReader(
-                new InputStreamReader(process == null ? System.in : process.getInputStream(),
-                        StandardCharsets.UTF_8))) {
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = in.readLine()) != null) {
                 if (line.isBlank()) {
@@ -178,7 +171,6 @@ public class NodeSidecarBridge implements IRemoteToolBridge {
                             future.complete(rpc);
                         }
                     }
-                    // 通知类消息忽略
                 } catch (Exception ignored) {
                     // 非 JSON 行（子进程日志）忽略
                 }

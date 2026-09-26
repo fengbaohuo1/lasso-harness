@@ -1,0 +1,6 @@
+id: sample-tools
+name: Sample Tools Plugin
+version: 1.0.0
+author: jnf
+description: 示例插件：天气查询 + 文件摘要，五注册口全演示。
+entrypoint: com.jnf.harness.sample.SampleToolsPlugin

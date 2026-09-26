@@ -70,6 +70,13 @@ public class PluginRegistryService {
         repository.updateStatus(pluginId, PluginLifecycleState.DISABLED.name());
     }
 
+    /** 热重载：停用（逆序回收）后按记录重新激活——替换制品后调用。 */
+    public synchronized void reload(String pluginId) {
+        require(pluginId);
+        disable(pluginId);
+        activate(pluginId);
+    }
+
     /** 卸载：停用 + 删记录。 */
     public void uninstall(String pluginId) {
         pluginHost.disable(pluginId);

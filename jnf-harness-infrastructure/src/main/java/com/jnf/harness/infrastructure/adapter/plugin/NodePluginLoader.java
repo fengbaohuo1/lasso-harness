@@ -7,6 +7,7 @@ import com.jnf.harness.spi.PluginManifest;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Node 插件加载器：校验入口 → 拉起 sidecar → 适配为 JavaHarnessPlugin（同构回收）。
@@ -21,7 +22,16 @@ public class NodePluginLoader implements INodePluginLoaderPort {
         if (pluginId == null || pluginId.isBlank()) {
             throw new IllegalArgumentException("pluginId 必填");
         }
-        NodeSidecarBridge bridge = new NodeSidecarBridge(pluginDir, entrypoint);
+        // 入口限定插件目录内 .js/.mjs/.cjs（防注入）
+        Path resolved = pluginDir.toAbsolutePath().normalize().resolve(entrypoint).normalize();
+        if (!resolved.startsWith(pluginDir.toAbsolutePath().normalize())) {
+            throw new IllegalArgumentException("入口必须位于插件目录内: " + entrypoint);
+        }
+        String fileName = resolved.getFileName().toString();
+        if (!(fileName.endsWith(".js") || fileName.endsWith(".mjs") || fileName.endsWith(".cjs"))) {
+            throw new IllegalArgumentException("入口必须是 .js/.mjs/.cjs: " + entrypoint);
+        }
+        JsonRpcStdioBridge bridge = new JsonRpcStdioBridge(pluginDir, List.of("node", resolved.toString()));
         bridge.start();
         try {
             PluginManifest manifest = new PluginManifest(pluginId, pluginId, "1.0.0",

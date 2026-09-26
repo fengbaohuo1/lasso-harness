@@ -24,6 +24,7 @@
     <module>jnf-harness-domain</module>
     <module>jnf-harness-infrastructure</module>
     <module>jnf-harness-trigger</module>
+    <module>jnf-harness-sample-plugin</module>
     <module>jnf-harness-app</module>
   </modules>
 

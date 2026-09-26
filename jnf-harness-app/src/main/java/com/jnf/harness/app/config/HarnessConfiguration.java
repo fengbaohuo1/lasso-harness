@@ -150,6 +150,11 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.tool.mcp.McpServerService mcpServerService(ToolRegistry toolRegistry) {
+        return new com.jnf.harness.domain.tool.mcp.McpServerService(toolRegistry);
+    }
+
+    @Bean
     public com.jnf.harness.domain.plugin.INodePluginLoaderPort nodePluginLoader() {
         return new com.jnf.harness.infrastructure.adapter.plugin.NodePluginLoader();
     }
