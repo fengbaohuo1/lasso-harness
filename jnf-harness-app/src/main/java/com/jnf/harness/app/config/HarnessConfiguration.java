@@ -89,7 +89,10 @@ public class HarnessConfiguration {
                                      com.jnf.harness.domain.goal.GoalService goalService,
                                      com.jnf.harness.domain.jobs.JobRegistryService jobService,
                                      com.jnf.harness.domain.schedule.ScheduleService scheduleService,
-                                     com.jnf.harness.domain.plan.PlanModeService planModeService) {
+                                     com.jnf.harness.domain.plan.PlanModeService planModeService,
+                                     com.jnf.harness.domain.terminal.TerminalService terminalService,
+                                     com.jnf.harness.domain.extension.ExtensionManagementService extensionService,
+                                     ISessionEventStore sessionEventStore) {
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(new FsReadTool());
         registry.register(new FsWriteTool());
@@ -108,7 +111,31 @@ public class HarnessConfiguration {
         registry.register(new com.jnf.harness.domain.goal.GoalTool(goalService));
         com.jnf.harness.domain.schedule.ScheduleTools.all(scheduleService).forEach(registry::register);
         registry.register(new com.jnf.harness.domain.plan.ExitPlanModeTool(planModeService));
+        // 第 12b：terminal / extension / session_search / lsp 工具族
+        com.jnf.harness.domain.terminal.TerminalTools.all(terminalService).forEach(registry::register);
+        com.jnf.harness.domain.extension.ExtensionTools.all(extensionService).forEach(registry::register);
+        registry.register(new com.jnf.harness.domain.session.SessionSearchTool(sessionEventStore));
+        registry.register(new com.jnf.harness.domain.lsp.LspTool());
         return registry;
+    }
+
+    // ---------------- 第 12b 节：workflow / terminal / extension ----------------
+
+    @Bean
+    public com.jnf.harness.domain.workflow.WorkflowService workflowService(AgentRunFactory agentRunFactory) {
+        return new com.jnf.harness.domain.workflow.WorkflowService(agentRunFactory);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.terminal.TerminalService terminalService() {
+        return new com.jnf.harness.domain.terminal.TerminalService();
+    }
+
+    @Bean
+    public com.jnf.harness.domain.extension.ExtensionManagementService extensionManagementService() {
+        return new com.jnf.harness.domain.extension.ExtensionManagementService(
+                command -> new com.jnf.harness.infrastructure.adapter.plugin.JsonRpcStdioBridge(
+                        Path.of(".").toAbsolutePath(), command));
     }
 
     // ---------------- 第 12 节：goal / jobs / schedule / plan（R7 持久化） ----------------
