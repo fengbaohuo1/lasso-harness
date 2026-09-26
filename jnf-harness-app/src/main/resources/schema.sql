@@ -71,6 +71,18 @@ CREATE TABLE IF NOT EXISTS harness_plugin_config (
     PRIMARY KEY (plugin_id, config_key, config_layer)
 );
 
+-- 审批历史（R10：审批可追溯）
+CREATE TABLE IF NOT EXISTS harness_approval_record (
+    id         VARCHAR(64)  PRIMARY KEY,
+    session_id VARCHAR(64),
+    tool_name  VARCHAR(128),
+    args_json  TEXT,
+    verdict    VARCHAR(32)  NOT NULL,
+    created_at TIMESTAMP(3),
+    decided_at TIMESTAMP(3)
+);
+CREATE INDEX IF NOT EXISTS idx_harness_approval_session ON harness_approval_record (session_id);
+
 -- 工具目录种子（11 个内置工具；幂等）
 INSERT INTO harness_tool_catalog (tool_code, display_name, description, category, requires_approval)
 SELECT 'fs_read', '读取文件', '读取文件内容', 'fs', FALSE FROM DUAL

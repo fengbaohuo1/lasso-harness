@@ -107,10 +107,46 @@ public class HarnessConfiguration {
         return new com.jnf.harness.domain.tool.service.ToolHookRegistry();
     }
 
+    // ---------------- 第 10 节：运行期审批（R1/R10） ----------------
+
+    @Bean
+    public com.jnf.harness.domain.task.approval.IApprovalRecordRepository approvalRecordRepository(
+            com.jnf.harness.infrastructure.dao.ApprovalRecordDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.setting.ApprovalRecordRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.task.approval.RuntimeApprovalService runtimeApprovalService(
+            com.jnf.harness.domain.task.approval.IApprovalRecordRepository repository) {
+        return new com.jnf.harness.domain.task.approval.RuntimeApprovalService(repository);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.task.approval.RuntimeApprovalGate runtimeApprovalGate(
+            com.jnf.harness.domain.task.approval.RuntimeApprovalService service,
+            com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
+            @Value("${harness.approval.mode:REQUEST_APPROVAL}") String mode,
+            @Value("${harness.approval.timeout-seconds:300}") long timeoutSeconds) {
+        // R1：默认 REQUEST_APPROVAL——目录中标记 requiresApproval 的工具挂起待裁决
+        java.util.Set<String> risky = new java.util.HashSet<>();
+        toolCatalogPort.findAll().forEach(entry -> {
+            if (entry.requiresApproval()) {
+                risky.add(entry.toolCode());
+            }
+        });
+        com.jnf.harness.domain.task.approval.RuntimeApprovalGate.Mode gateMode =
+                "AUTO_APPROVE".equalsIgnoreCase(mode)
+                        ? com.jnf.harness.domain.task.approval.RuntimeApprovalGate.Mode.AUTO_APPROVE
+                        : com.jnf.harness.domain.task.approval.RuntimeApprovalGate.Mode.REQUEST_APPROVAL;
+        return new com.jnf.harness.domain.task.approval.RuntimeApprovalGate(
+                service, gateMode, risky::contains, "session", timeoutSeconds);
+    }
+
     @Bean
     public ToolRunner toolRunner(ToolRegistry toolRegistry,
-                                 com.jnf.harness.domain.tool.service.ToolHookRegistry hookRegistry) {
-        return new ToolCallExecutor(toolRegistry, List.of(hookRegistry), null,
+                                 com.jnf.harness.domain.tool.service.ToolHookRegistry hookRegistry,
+                                 com.jnf.harness.domain.task.approval.RuntimeApprovalGate approvalGate) {
+        return new ToolCallExecutor(toolRegistry, List.of(hookRegistry), approvalGate,
                 new DefaultToolRunContext("agent", "session",
                         Path.of("").toAbsolutePath().toString()), 300, 10);
     }
