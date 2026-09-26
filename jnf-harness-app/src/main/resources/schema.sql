@@ -83,6 +83,41 @@ CREATE TABLE IF NOT EXISTS harness_approval_record (
 );
 CREATE INDEX IF NOT EXISTS idx_harness_approval_session ON harness_approval_record (session_id);
 
+-- 后台作业（R7：持久化，不接受重启即丢）
+CREATE TABLE IF NOT EXISTS harness_job (
+    job_id      VARCHAR(64)  PRIMARY KEY,
+    name        VARCHAR(128),
+    command     TEXT,
+    status      VARCHAR(32)  NOT NULL,
+    output      TEXT,
+    created_at  TIMESTAMP(3),
+    finished_at TIMESTAMP(3)
+);
+
+-- 调度记录（R7：持久化）
+CREATE TABLE IF NOT EXISTS harness_schedule (
+    schedule_id VARCHAR(64)  PRIMARY KEY,
+    kind        VARCHAR(32),
+    name        VARCHAR(128),
+    spec        VARCHAR(255),
+    state       VARCHAR(32)  NOT NULL,
+    created_at  TIMESTAMP(3)
+);
+
+-- 目标快照（goal 域）
+CREATE TABLE IF NOT EXISTS harness_goal_state (
+    session_id     VARCHAR(64) PRIMARY KEY,
+    goal_id        VARCHAR(64),
+    revision       BIGINT,
+    title          VARCHAR(255),
+    description    TEXT,
+    status         VARCHAR(32),
+    blocked_reason VARCHAR(255),
+    max_rounds     INT,
+    rounds_started INT,
+    updated_at     TIMESTAMP(3)
+);
+
 -- 工具目录种子（11 个内置工具；幂等）
 INSERT INTO harness_tool_catalog (tool_code, display_name, description, category, requires_approval)
 SELECT 'fs_read', '读取文件', '读取文件内容', 'fs', FALSE FROM DUAL

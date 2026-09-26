@@ -85,7 +85,11 @@ public class HarnessConfiguration {
 
     @Bean
     public ToolRegistry toolRegistry(IShellExecutor shellExecutor, IWebPort webPort,
-                                     UserQuestionGateway userQuestionGateway, TodoService todoService) {
+                                     UserQuestionGateway userQuestionGateway, TodoService todoService,
+                                     com.jnf.harness.domain.goal.GoalService goalService,
+                                     com.jnf.harness.domain.jobs.JobRegistryService jobService,
+                                     com.jnf.harness.domain.schedule.ScheduleService scheduleService,
+                                     com.jnf.harness.domain.plan.PlanModeService planModeService) {
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(new FsReadTool());
         registry.register(new FsWriteTool());
@@ -99,7 +103,40 @@ public class HarnessConfiguration {
         registry.register(new WebSearchTool(webPort));
         registry.register(new AskUserTool(userQuestionGateway, 300));
         registry.register(new TodoWriteTool(todoService));
+        // 第 12 节：jobs / goal / schedule / plan 工具族
+        com.jnf.harness.domain.jobs.JobTools.all(jobService).forEach(registry::register);
+        registry.register(new com.jnf.harness.domain.goal.GoalTool(goalService));
+        com.jnf.harness.domain.schedule.ScheduleTools.all(scheduleService).forEach(registry::register);
+        registry.register(new com.jnf.harness.domain.plan.ExitPlanModeTool(planModeService));
         return registry;
+    }
+
+    // ---------------- 第 12 节：goal / jobs / schedule / plan（R7 持久化） ----------------
+
+    @Bean
+    public com.jnf.harness.domain.goal.GoalService goalService(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new com.jnf.harness.domain.goal.GoalService(
+                new com.jnf.harness.infrastructure.adapter.setting.RuntimeStateRepositories.GoalRepository(jdbc));
+    }
+
+    @Bean
+    public com.jnf.harness.domain.jobs.JobRegistryService jobRegistryService(IShellExecutor shellExecutor,
+                                                                             org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new com.jnf.harness.domain.jobs.JobRegistryService(
+                new com.jnf.harness.infrastructure.adapter.setting.RuntimeStateRepositories.JobRepository(jdbc),
+                shellExecutor);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.schedule.ScheduleService scheduleService(
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new com.jnf.harness.domain.schedule.ScheduleService(
+                new com.jnf.harness.infrastructure.adapter.setting.RuntimeStateRepositories.ScheduleRepository(jdbc));
+    }
+
+    @Bean
+    public com.jnf.harness.domain.plan.PlanModeService planModeService() {
+        return new com.jnf.harness.domain.plan.PlanModeService();
     }
 
     @Bean
