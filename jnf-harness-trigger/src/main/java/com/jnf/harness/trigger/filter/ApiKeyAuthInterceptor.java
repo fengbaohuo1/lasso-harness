@@ -28,7 +28,8 @@ public class ApiKeyAuthInterceptor implements HandlerInterceptor {
             return true;
         }
         String path = request.getRequestURI();
-        if (path.startsWith("/actuator") || path.equals("/") || path.startsWith("/index")
+        if (path.startsWith("/actuator") || path.startsWith("/.well-known")
+                || path.equals("/") || path.startsWith("/index")
                 || path.startsWith("/app.") || path.startsWith("/lib/") || path.startsWith("/favicon")) {
             return true;
         }
