@@ -5,6 +5,15 @@ spring:
   application:
     name: jnf-harness
 
+harness:
+  auth:
+    api-keys: ${HARNESS_API_KEYS:}
+  llm:
+    default:
+      base-url: ${LLM_BASE_URL:http://127.0.0.1:8777/v1}
+      api-key: ${LLM_API_KEY:}
+      model: ${LLM_MODEL:default-model}
+
 logging:
   level:
     root: INFO

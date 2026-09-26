@@ -12,8 +12,9 @@ import java.util.concurrent.CompletableFuture;
  */
 public class Inbox {
 
-    /** 待处理消息：文本 + 完成信号。 */
-    public record PendingMessage(String text, CompletableFuture<TurnSummary> future) {
+    /** 待处理消息：文本 + 完成信号 + 可选流式监听（每问一监听）。 */
+    public record PendingMessage(String text, CompletableFuture<TurnSummary> future,
+                                 com.jnf.harness.domain.agent.service.run.AgentEventListener listener) {
     }
 
     /** 一个 turn 的结果摘要。 */

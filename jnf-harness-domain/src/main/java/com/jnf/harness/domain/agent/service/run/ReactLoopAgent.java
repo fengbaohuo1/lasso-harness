@@ -52,21 +52,6 @@ public class ReactLoopAgent {
 
     public static final String CONTINUATION_PROMPT = "请继续完成未完成的输出。";
 
-    /** 流式观测缝（SSE 层接线用）。 */
-    public interface AgentEventListener {
-        default void onChunk(String text) {
-        }
-
-        default void onToolCall(ToolCallBlock call) {
-        }
-
-        default void onToolResult(ToolCallBlock call, ToolExecutionResult result) {
-        }
-
-        default void onTurnEnd(Inbox.TurnSummary summary) {
-        }
-    }
-
     private final String agentId;
     private final PersistingSessionLog session;
     private final ILlmRuntimePort llm;
@@ -112,7 +97,12 @@ public class ReactLoopAgent {
 
     /** 提交一条用户消息；future 在对应 turn 结束时完成。 */
     public CompletableFuture<Inbox.TurnSummary> ask(String text) {
-        Inbox.PendingMessage message = new Inbox.PendingMessage(text, new CompletableFuture<>());
+        return ask(text, null);
+    }
+
+    /** 提交一条用户消息并挂本问专属流式监听。 */
+    public CompletableFuture<Inbox.TurnSummary> ask(String text, AgentEventListener listener) {
+        Inbox.PendingMessage message = new Inbox.PendingMessage(text, new CompletableFuture<>(), listener);
         inbox.add(message);
         if (started.compareAndSet(false, true)) {
             driver.submit(this::driverLoop);
@@ -179,6 +169,13 @@ public class ReactLoopAgent {
         AtomicBoolean turnAbort = new AtomicBoolean(false);
         phase = new Phase.Running(turnAbort, turn, 0);
         abort.set(false);
+        // 事件分发：默认监听 + 本 turn 首个消息的专属监听
+        AgentEventListener perTurn = claimed.stream()
+                .map(Inbox.PendingMessage::listener)
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
+        AgentEventListener events = mergeListeners(this.listener, perTurn);
         session.append(new SessionEvent.TurnStart(turn));
         runCompactionIfHeavy();
 
@@ -208,7 +205,7 @@ public class ReactLoopAgent {
                 phase = new Phase.Running(turnAbort, turn, step);
                 session.append(new SessionEvent.StepStart(turn, step));
 
-                BlockAssembler.GenerationResult result = generate(turn, step);
+                BlockAssembler.GenerationResult result = generate(turn, step, events);
 
                 session.append(new SessionEvent.StepEnd(turn, step));
                 if (abort.get() || turnAbort.get()) {
@@ -240,11 +237,11 @@ public class ReactLoopAgent {
 
                 for (ToolCallBlock call : result.toolCalls()) {
                     session.append(new SessionEvent.ToolCall(turn, step, call.callId(), call.name(), call.arguments()));
-                    listener.onToolCall(call);
+                    events.onToolCall(call);
                     ToolExecutionResult toolResult = executeTool(call);
                     session.append(new SessionEvent.ToolResult(turn, step, call.callId(), call.name(),
                             toolResult.failed(), toolResult.content()));
-                    listener.onToolResult(call, toolResult);
+                    events.onToolResult(call, toolResult);
                     if (abort.get()) {
                         break;
                     }
@@ -271,7 +268,47 @@ public class ReactLoopAgent {
             }
         }
         listener.onTurnEnd(summary);
+        if (perTurn != null) {
+            perTurn.onTurnEnd(summary);
+        }
         phase = new Phase.Idle();
+    }
+
+    /** 合并两个监听器（任一为空只发另一个）。 */
+    private static AgentEventListener mergeListeners(AgentEventListener first, AgentEventListener second) {
+        if (second == null) {
+            return first;
+        }
+        if (first == null) {
+            return second;
+        }
+        AgentEventListener a = first;
+        AgentEventListener b = second;
+        return new AgentEventListener() {
+            @Override
+            public void onChunk(String text) {
+                a.onChunk(text);
+                b.onChunk(text);
+            }
+
+            @Override
+            public void onToolCall(ToolCallBlock call) {
+                a.onToolCall(call);
+                b.onToolCall(call);
+            }
+
+            @Override
+            public void onToolResult(ToolCallBlock call, ToolExecutionResult result) {
+                a.onToolResult(call, result);
+                b.onToolResult(call, result);
+            }
+
+            @Override
+            public void onTurnEnd(Inbox.TurnSummary summary) {
+                a.onTurnEnd(summary);
+                b.onTurnEnd(summary);
+            }
+        };
     }
 
     private void appendAssistant(long turn, long step, String text, StringBuilder lastAssistant) {
@@ -293,7 +330,7 @@ public class ReactLoopAgent {
 
     // ---------------- 生成 ----------------
 
-    private BlockAssembler.GenerationResult generate(long turn, long step) {
+    private BlockAssembler.GenerationResult generate(long turn, long step, AgentEventListener events) {
         List<Message> messages = buildMessages();
         GenerateOptions generateOptions = GenerateOptions.builder()
                 .channel(options.channel())
@@ -319,7 +356,7 @@ public class ReactLoopAgent {
                 assembler.accept(chunk);
                 if (chunk instanceof StreamChunk.TextDelta delta) {
                     session.append(new SessionEvent.AssistantChunk(turn, step, delta.text()));
-                    listener.onChunk(delta.text());
+                    events.onChunk(delta.text());
                 }
             }
 

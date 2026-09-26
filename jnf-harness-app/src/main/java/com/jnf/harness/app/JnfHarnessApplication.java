@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * jnf-harness 启动器。
  * <p>作者：jnf。DDD 六边形分层装配见各模块。
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "com.jnf.harness")
 public class JnfHarnessApplication {
 
     public static void main(String[] args) {
