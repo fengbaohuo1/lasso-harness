@@ -128,25 +128,70 @@ public class HarnessConfiguration {
         return new JsonlSessionEventStore(Path.of("./data/events"));
     }
 
+    // ---------------- 第 8 节：持久化与模型渠道 ----------------
+
+    @Bean
+    public com.jnf.harness.domain.runtime.setting.IModelSettingRepository modelSettingRepository(
+            com.jnf.harness.infrastructure.dao.ModelSettingDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.setting.ModelSettingRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.runtime.setting.ModelSettingService modelSettingService(
+            com.jnf.harness.domain.runtime.setting.IModelSettingRepository repository) {
+        return new com.jnf.harness.domain.runtime.setting.ModelSettingService(repository);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort(
+            com.jnf.harness.infrastructure.dao.ToolCatalogDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.setting.ToolCatalogRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.runtime.model.IModelDiscoveryPort modelDiscoveryPort() {
+        return new com.jnf.harness.infrastructure.adapter.setting.ModelDiscoveryService();
+    }
+
     @Bean
     public AgentRunFactory agentRunFactory(ILlmRuntimePort llmRuntimePort, ToolRunner toolRunner,
                                            ToolRegistry toolRegistry, ISessionEventStore store,
                                            SystemPromptAssembler promptAssembler,
                                            CompactionEngine compactionEngine,
+                                           com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
+                                           com.jnf.harness.domain.runtime.setting.ModelSettingService modelSettingService,
                                            @Value("${harness.llm.default.base-url}") String baseUrl,
                                            @Value("${harness.llm.default.api-key}") String apiKey,
                                            @Value("${harness.llm.default.model}") String model) {
+        // R5：工具目录真接线——只暴露 default 画像启用的工具
+        java.util.Set<String> enabled = toolCatalogPort.findEnabled("default").stream()
+                .map(com.jnf.harness.domain.runtime.tool.IToolCatalogPort.ToolCatalogEntry::toolCode)
+                .collect(java.util.stream.Collectors.toSet());
         List<Map<String, Object>> schemas = new ArrayList<>();
         for (ToolDefinition tool : toolRegistry.list()) {
+            if (!enabled.isEmpty() && !enabled.contains(tool.name())) {
+                continue;
+            }
             Map<String, Object> schema = new LinkedHashMap<>();
             schema.put("name", tool.name());
             schema.put("description", tool.description());
             schema.put("parameters", tool.parameters());
             schemas.add(schema);
         }
-        AgentOptions options = AgentOptions.of(model, LlmChannel.openai(baseUrl, apiKey));
-        return new AgentRunFactory(llmRuntimePort, toolRunner, () -> options,
-                () -> schemas, store, promptAssembler, compactionEngine);
+        List<Map<String, Object>> finalSchemas = schemas;
+        // 模型渠道：DB 生效渠道优先，文件配置兜底（对齐参照语义）
+        java.util.function.Supplier<AgentOptions> optionsSupplier = () -> {
+            var active = modelSettingService.active();
+            if (active.isPresent()) {
+                var setting = active.get();
+                return AgentOptions.of(setting.modelCode(), new LlmChannel(setting.baseUrl(),
+                        System.getenv().getOrDefault(setting.apiKeyRef() == null ? "" : setting.apiKeyRef(), ""),
+                        com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol())));
+            }
+            return AgentOptions.of(model, LlmChannel.openai(baseUrl, apiKey));
+        };
+        return new AgentRunFactory(llmRuntimePort, toolRunner, optionsSupplier,
+                () -> finalSchemas, store, promptAssembler, compactionEngine);
     }
 
     @Bean

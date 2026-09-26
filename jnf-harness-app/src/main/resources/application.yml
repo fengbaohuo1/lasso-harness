@@ -4,6 +4,18 @@ server:
 spring:
   application:
     name: jnf-harness
+  datasource:
+    # D4：默认 H2 文件库（standalone）；MySQL 用环境变量覆盖 url/账号（R9：此处无任何密钥）
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/jnf-harness;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  sql:
+    init:
+      mode: always
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
 
 harness:
   auth:

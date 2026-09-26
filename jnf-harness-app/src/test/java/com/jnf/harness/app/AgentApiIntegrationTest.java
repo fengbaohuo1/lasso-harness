@@ -38,7 +38,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         classes = JnfHarnessApplication.class,
-        properties = {"harness.auth.api-keys=test-key", "harness.llm.default.base-url=http://127.0.0.1:1/v1"})
+        properties = {"harness.auth.api-keys=test-key", "harness.llm.default.base-url=http://127.0.0.1:1/v1",
+                "spring.datasource.url=jdbc:h2:mem:apitest;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1"})
 @org.springframework.context.annotation.Import(AgentApiIntegrationTest.FakeLlmConfiguration.class)
 class AgentApiIntegrationTest {
 
