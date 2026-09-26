@@ -141,6 +141,38 @@ CREATE TABLE IF NOT EXISTS digital_human_endpoint (
 );
 CREATE INDEX IF NOT EXISTS idx_dh_endpoint_human ON digital_human_endpoint (digital_human_id);
 
+-- 协作房间（第 13b 节：room/participant/room_event）
+CREATE TABLE IF NOT EXISTS collaboration_room (
+    id                 VARCHAR(64) PRIMARY KEY,
+    workspace_id       VARCHAR(64),
+    title              VARCHAR(255),
+    objective          TEXT,
+    orchestration_mode VARCHAR(32) DEFAULT 'MANUAL',
+    run_state          VARCHAR(16) DEFAULT 'idle',
+    created_at         TIMESTAMP(3)
+);
+
+CREATE TABLE IF NOT EXISTS room_participant (
+    id              VARCHAR(64) PRIMARY KEY,
+    room_id         VARCHAR(64),
+    digital_human_id VARCHAR(64),
+    room_role       VARCHAR(32) DEFAULT 'member',
+    presence        VARCHAR(16) DEFAULT 'idle',
+    joined_at       TIMESTAMP(3),
+    UNIQUE (room_id, digital_human_id)
+);
+
+CREATE TABLE IF NOT EXISTS room_event (
+    id          VARCHAR(64) PRIMARY KEY,
+    room_id     VARCHAR(64),
+    seq         BIGINT,
+    event_type  VARCHAR(48),
+    payload     TEXT,
+    occurred_at TIMESTAMP(3),
+    UNIQUE (room_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_room_event_room_seq ON room_event (room_id, seq);
+
 -- 工具目录种子（11 个内置工具；幂等）
 INSERT INTO harness_tool_catalog (tool_code, display_name, description, category, requires_approval)
 SELECT 'fs_read', '读取文件', '读取文件内容', 'fs', FALSE FROM DUAL

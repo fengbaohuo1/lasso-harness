@@ -157,6 +157,13 @@ public class HarnessConfiguration {
         return new com.jnf.harness.infrastructure.adapter.web.RemoteAgentDiscoveryService();
     }
 
+    @Bean
+    public com.jnf.harness.domain.collaboration.CollaborationService collaborationService(
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new com.jnf.harness.domain.collaboration.CollaborationService(
+                new com.jnf.harness.infrastructure.adapter.setting.CollaborationRepository(jdbc));
+    }
+
     // ---------------- 第 12 节：goal / jobs / schedule / plan（R7 持久化） ----------------
 
     @Bean
