@@ -285,8 +285,27 @@ public class HarnessConfiguration {
     }
 
     @Bean
-    public com.jnf.harness.spi.PluginConfigStore pluginConfigStore() {
-        return new com.jnf.harness.domain.plugin.InMemoryPluginConfigStore();
+    public com.jnf.harness.domain.plugin.registry.IPluginConfigRepository pluginConfigRepository(
+            com.jnf.harness.infrastructure.dao.PluginConfigDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.plugin.PluginConfigRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.spi.PluginConfigStore pluginConfigStore(
+            com.jnf.harness.domain.plugin.registry.IPluginConfigRepository repository) {
+        // P1：DB 持久化替换内存实现（重启配置不丢）
+        return new com.jnf.harness.infrastructure.adapter.plugin.JdbcPluginConfigStore(repository);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.plugin.registry.PluginConfigService pluginConfigService(
+            com.jnf.harness.domain.plugin.registry.IPluginConfigRepository repository) {
+        return new com.jnf.harness.domain.plugin.registry.PluginConfigService(repository);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.plugin.registry.IPluginCatalogPort pluginCatalogPort() {
+        return new com.jnf.harness.infrastructure.adapter.plugin.PluginCatalogService();
     }
 
     @Bean
@@ -322,12 +341,26 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.plugin.registry.IPluginRuntimeBindingRepository pluginRuntimeBindingRepository(
+            com.jnf.harness.infrastructure.dao.PluginRuntimeBindingDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.plugin.PluginRuntimeBindingRepository(dao);
+    }
+
+    @Bean
     public com.jnf.harness.domain.plugin.registry.PluginRegistryService pluginRegistryService(
             com.jnf.harness.domain.plugin.registry.IPluginInstallationRepository repository,
             com.jnf.harness.domain.plugin.PluginHost pluginHost,
-            com.jnf.harness.domain.plugin.INodePluginLoaderPort nodePluginLoader) {
+            com.jnf.harness.domain.plugin.INodePluginLoaderPort nodePluginLoader,
+            com.jnf.harness.domain.plugin.registry.IPluginRuntimeBindingRepository runtimeBinding) {
         return new com.jnf.harness.domain.plugin.registry.PluginRegistryService(
-                repository, pluginHost, nodePluginLoader);
+                repository, pluginHost, nodePluginLoader, runtimeBinding);
+    }
+
+    @Bean
+    public com.jnf.harness.app.boot.PluginBootActivator pluginBootActivator(
+            com.jnf.harness.domain.plugin.registry.PluginRegistryService registry) {
+        // P3：重启后 ACTIVE 插件自动恢复
+        return new com.jnf.harness.app.boot.PluginBootActivator(registry);
     }
 
     @Bean
@@ -358,9 +391,33 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.runtime.secret.ISecretStore secretStore() {
+        // M1：本地密钥库（data/secrets.json，Base64 混淆；R9 边界见计划 SD1）
+        return new com.jnf.harness.infrastructure.adapter.secret.FileSecretStore(Path.of("./data/secrets.json"));
+    }
+
+    @Bean
+    public com.jnf.harness.domain.runtime.secret.SecretRefResolver secretRefResolver(
+            com.jnf.harness.domain.runtime.secret.ISecretStore store) {
+        return new com.jnf.harness.domain.runtime.secret.SecretRefResolver(store);
+    }
+
+    @Bean
     public com.jnf.harness.domain.runtime.setting.ModelSettingService modelSettingService(
-            com.jnf.harness.domain.runtime.setting.IModelSettingRepository repository) {
-        return new com.jnf.harness.domain.runtime.setting.ModelSettingService(repository);
+            com.jnf.harness.domain.runtime.setting.IModelSettingRepository repository,
+            com.jnf.harness.domain.runtime.secret.SecretRefResolver secrets) {
+        return new com.jnf.harness.domain.runtime.setting.ModelSettingService(repository, secrets);
+    }
+
+    @Bean
+    public com.jnf.harness.app.boot.ModelSettingBootSeed modelSettingBootSeed(
+            com.jnf.harness.domain.runtime.setting.ModelSettingService service,
+            @Value("${harness.llm.default.base-url:}") String baseUrl,
+            @Value("${harness.llm.default.api-key:}") String apiKey,
+            @Value("${harness.llm.default.model:}") String model,
+            @Value("${harness.llm.seed-default-channel:true}") boolean seedEnabled) {
+        // M2：首启 seed（渠道表空时把文件配置落成 default 渠道；测试可关）
+        return new com.jnf.harness.app.boot.ModelSettingBootSeed(service, baseUrl, apiKey, model, seedEnabled);
     }
 
     @Bean
@@ -406,7 +463,7 @@ public class HarnessConfiguration {
             if (active.isPresent()) {
                 var setting = active.get();
                 return AgentOptions.of(setting.modelCode(), new LlmChannel(setting.baseUrl(),
-                        System.getenv().getOrDefault(setting.apiKeyRef() == null ? "" : setting.apiKeyRef(), ""),
+                        modelSettingService.secrets().resolve(setting.apiKeyRef()),
                         com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol())));
             }
             return AgentOptions.of(model, LlmChannel.openai(baseUrl, apiKey));

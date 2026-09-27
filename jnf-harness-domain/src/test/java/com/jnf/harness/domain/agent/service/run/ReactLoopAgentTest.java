@@ -80,7 +80,7 @@ class ReactLoopAgentTest {
         PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
         SystemPromptAssembler assembler = new SystemPromptAssembler();
         assembler.registerSection(new SystemPromptAssembler.PromptSection("base", 0, "你是测试智能体。"));
-        return new ReactLoopAgent("agent-1", session, llm, options, runner,
+        return new ReactLoopAgent("agent-1", session, llm, () -> options, runner,
                 () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
                 assembler,
                 new BasicCompactionEngine(events -> "早期历史摘要"), null);
@@ -117,6 +117,34 @@ class ReactLoopAgentTest {
         assertTrue(events.stream().anyMatch(e -> e instanceof SessionEvent.AssistantChunk));
         assertTrue(events.stream().anyMatch(e -> e instanceof SessionEvent.AssistantMessage));
         assertTrue(events.get(events.size() - 1) instanceof SessionEvent.TurnEnd);
+    }
+
+    @Test
+    @DisplayName("M4 渠道热切换：切换后下一次生成走新渠道/新模型")
+    void channel_hot_switch_applies_to_next_generation() throws Exception {
+        FakeLlm llm = new FakeLlm();
+        llm.scripts.add(text("第一答", FinishReason.STOP));
+        llm.scripts.add(text("第二答", FinishReason.STOP));
+        AgentOptions[] current = {new AgentOptions("model-1", LlmChannel.openai("http://one:1", "k1"),
+                50, 4, 128_000, 6, 100_000L, null, null)};
+        PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
+        ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm, () -> current[0],
+                call -> CompletableFuture.completedFuture(ToolExecutionResult.ok("unused")),
+                () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
+                new SystemPromptAssembler(),
+                new BasicCompactionEngine(events -> "摘要"), null);
+
+        agent.ask("第一问").get(5, TimeUnit.SECONDS);
+        current[0] = new AgentOptions("model-2", LlmChannel.openai("http://two:1", "k2"),
+                50, 4, 128_000, 6, 100_000L, null, null);
+        agent.ask("第二问").get(5, TimeUnit.SECONDS);
+
+        assertEquals(2, llm.calls.size());
+        assertEquals("model-1", llm.calls.get(0).model());
+        assertEquals("http://one:1", llm.calls.get(0).channel().baseUrl());
+        assertEquals("model-2", llm.calls.get(1).model());
+        assertEquals("http://two:1", llm.calls.get(1).channel().baseUrl());
+        agent.shutdown();
     }
 
     @Test

@@ -31,13 +31,20 @@ public class ModelDiscoveryService implements IModelDiscoveryPort {
         if (url.endsWith("/")) {
             url = url.substring(0, url.length() - 1);
         }
-        String target = "ollama".equalsIgnoreCase(protocol) ? url + "/api/tags" : url + "/models";
+        String target = "ollama".equalsIgnoreCase(protocol) ? url + "/api/tags"
+                : "anthropic".equalsIgnoreCase(protocol) ? url + "/v1/models"
+                : url + "/models";
         try {
             HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(target))
                     .timeout(Duration.ofSeconds(15))
                     .GET();
             if (apiKey != null && !apiKey.isBlank()) {
-                builder.header("Authorization", "Bearer " + apiKey);
+                if ("anthropic".equalsIgnoreCase(protocol)) {
+                    builder.header("x-api-key", apiKey);
+                    builder.header("anthropic-version", "2023-06-01");
+                } else {
+                    builder.header("Authorization", "Bearer " + apiKey);
+                }
             }
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() >= 400) {

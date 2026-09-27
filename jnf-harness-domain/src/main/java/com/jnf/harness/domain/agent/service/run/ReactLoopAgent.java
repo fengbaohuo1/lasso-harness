@@ -55,7 +55,7 @@ public class ReactLoopAgent {
     private final String agentId;
     private final PersistingSessionLog session;
     private final ILlmRuntimePort llm;
-    private final AgentOptions options;
+    private final Supplier<AgentOptions> optionsRef;
     private final ToolRunner toolRunner;
     private final Supplier<List<Map<String, Object>>> toolSchemas;
     private final SystemPromptAssembler promptAssembler;
@@ -73,14 +73,14 @@ public class ReactLoopAgent {
     private volatile Phase phase = new Phase.Idle();
 
     public ReactLoopAgent(String agentId, PersistingSessionLog session, ILlmRuntimePort llm,
-                          AgentOptions options, ToolRunner toolRunner,
+                          Supplier<AgentOptions> optionsRef, ToolRunner toolRunner,
                           Supplier<List<Map<String, Object>>> toolSchemas,
                           SystemPromptAssembler promptAssembler,
                           CompactionEngine compactionEngine, AgentEventListener listener) {
         this.agentId = agentId;
         this.session = session;
         this.llm = llm;
-        this.options = options;
+        this.optionsRef = optionsRef;
         this.toolRunner = toolRunner;
         this.toolSchemas = toolSchemas;
         this.promptAssembler = promptAssembler;
@@ -195,7 +195,7 @@ public class ReactLoopAgent {
                     endReason = TurnEndReason.ABORTED;
                     break;
                 }
-                if (step >= options.maxStepsPerTurn()) {
+                if (step >= options().maxStepsPerTurn()) {
                     endReason = TurnEndReason.MAX_STEPS;
                     detail = "max steps per turn exceeded";
                     break;
@@ -216,7 +216,7 @@ public class ReactLoopAgent {
                 meter.record(result.usage());
 
                 if (result.finishReason() == FinishReason.LENGTH
-                        && tokenContinuations < options.maxTokenContinuations()) {
+                        && tokenContinuations < options().maxTokenContinuations()) {
                     // max_tokens 截断：受控续写
                     tokenContinuations++;
                     if (!result.text().isBlank()) {
@@ -332,6 +332,8 @@ public class ReactLoopAgent {
 
     private BlockAssembler.GenerationResult generate(long turn, long step, AgentEventListener events) {
         List<Message> messages = buildMessages();
+        // M4：每步按最新生效渠道解析（渠道热切换对下一次生成即生效）
+        AgentOptions options = options();
         GenerateOptions generateOptions = GenerateOptions.builder()
                 .channel(options.channel())
                 .model(options.model())
@@ -398,9 +400,9 @@ public class ReactLoopAgent {
         }
         messages.addAll(derived);
 
-        long budget = options.contextTokenBudget();
+        long budget = options().contextTokenBudget();
         while (estimateTokens(messages) > budget
-                && messages.size() > options.keepRecentMessages() + 1) {
+                && messages.size() > options().keepRecentMessages() + 1) {
             // 优先裁掉最旧的非系统消息
             int removeIndex = messages.get(0).source() == MessageSource.SYSTEM ? 1 : 0;
             messages.remove(removeIndex);
@@ -410,7 +412,12 @@ public class ReactLoopAgent {
 
     private void runCompactionIfHeavy() {
         long estimate = estimateTokens(session.log().deriveMessages());
-        compactionEngine.compactIfNeeded(session.log(), estimate, options.compactionThresholdTokens());
+        compactionEngine.compactIfNeeded(session.log(), estimate, options().compactionThresholdTokens());
+    }
+
+    /** 运行选项（M4：turn/step 级解析，支撑渠道热切换）。 */
+    private AgentOptions options() {
+        return optionsRef.get();
     }
 
     private long estimateTokens(List<Message> messages) {

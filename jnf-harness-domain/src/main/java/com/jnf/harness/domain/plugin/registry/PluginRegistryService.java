@@ -20,12 +20,15 @@ public class PluginRegistryService {
     private final IPluginInstallationRepository repository;
     private final PluginHost pluginHost;
     private final com.jnf.harness.domain.plugin.INodePluginLoaderPort nodeLoader;
+    private final IPluginRuntimeBindingRepository runtimeBinding;
 
     public PluginRegistryService(IPluginInstallationRepository repository, PluginHost pluginHost,
-                                 com.jnf.harness.domain.plugin.INodePluginLoaderPort nodeLoader) {
+                                 com.jnf.harness.domain.plugin.INodePluginLoaderPort nodeLoader,
+                                 IPluginRuntimeBindingRepository runtimeBinding) {
         this.repository = repository;
         this.pluginHost = pluginHost;
         this.nodeLoader = nodeLoader;
+        this.runtimeBinding = runtimeBinding;
     }
 
     /** 登记插件（制品必须已存在）。 */
@@ -47,8 +50,9 @@ public class PluginRegistryService {
     /** 激活（加载 + 注册工具/提示词/Hook）；按 runtimeType 走 Java / Node 通道。 */
     public void activate(String pluginId) {
         PluginInstallationEntity record = require(pluginId);
+        boolean nodeBridge = RUNTIME_NODE_BRIDGE.equalsIgnoreCase(record.runtimeType());
         try {
-            if (RUNTIME_NODE_BRIDGE.equalsIgnoreCase(record.runtimeType())) {
+            if (nodeBridge) {
                 if (nodeLoader == null) {
                     throw new IllegalStateException("Node Bridge 未启用");
                 }
@@ -58,10 +62,26 @@ public class PluginRegistryService {
                 pluginHost.activate(Path.of(record.sourcePath()));
             }
         } catch (RuntimeException e) {
+            if (nodeBridge) {
+                recordBinding(record, false, String.valueOf(e.getMessage()));
+            }
             repository.updateStatus(pluginId, PluginLifecycleState.FAILED.name());
             throw e;
         }
+        if (nodeBridge) {
+            recordBinding(record, true, "bridge ready");
+        }
         repository.updateStatus(pluginId, PluginLifecycleState.ACTIVE.name());
+    }
+
+    /** P3：Node Bridge 激活状态落 harness_plugin_runtime_binding。 */
+    private void recordBinding(PluginInstallationEntity record, boolean ready, String message) {
+        if (runtimeBinding == null) {
+            return;
+        }
+        runtimeBinding.upsert(new PluginRuntimeBindingEntity(
+                record.pluginId(), record.runtimeType(), record.sourcePath(), record.sourcePath(),
+                "node " + (record.entrypoint() == null ? "" : record.entrypoint()), ready, message));
     }
 
     /** 停用（逆序回收贡献项）。 */

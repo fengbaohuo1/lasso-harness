@@ -56,7 +56,7 @@ public class AgentRunFactory {
                 }
             }
             PersistingSessionLog session = new PersistingSessionLog(id, log, store);
-            return new ReactLoopAgent(id, session, llm, optionsSupplier.get(),
+            return new ReactLoopAgent(id, session, llm, optionsSupplier,
                     toolRunner, toolSchemas, promptAssembler, compactionEngine, defaultListener);
         });
     }

@@ -30,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         classes = JnfHarnessApplication.class,
         properties = {"harness.auth.api-keys=test-key",
+                "harness.llm.seed-default-channel=false",
                 "spring.datasource.url=jdbc:h2:mem:dbtest;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1"})
 class PersistenceIntegrationTest {
 
@@ -47,6 +48,12 @@ class PersistenceIntegrationTest {
 
     @Autowired
     DataSource dataSource;
+
+    @Autowired
+    com.jnf.harness.domain.plugin.registry.PluginConfigService pluginConfigService;
+
+    @Autowired
+    com.jnf.harness.spi.PluginConfigStore pluginConfigStore;
 
     private HttpServer modelsServer;
 
@@ -75,7 +82,8 @@ class PersistenceIntegrationTest {
                 "http://127.0.0.1:1/v1", "KEY_A", "openai", true, false));
         modelSettingService.save(new ModelSettingEntity("ch-b", "渠道B", "anthropic", "model-b",
                 "http://127.0.0.1:2", "KEY_B", "anthropic", true, false));
-        assertEquals(2, modelSettingService.list().size());
+        assertEquals(2, modelSettingService.list().stream()
+                .filter(item -> item.channelCode().equals("ch-a") || item.channelCode().equals("ch-b")).count());
 
         modelSettingService.activate("ch-b");
         assertEquals("ch-b", modelSettingService.active().orElseThrow().channelCode());
@@ -89,7 +97,44 @@ class PersistenceIntegrationTest {
                 new ModelSettingEntity("bad", "x", "p", "m", "http://x", "K", "ftp", true, false)));
 
         modelSettingService.delete("ch-b");
-        assertEquals(1, modelSettingService.list().size());
+        assertTrue(modelSettingService.list().stream()
+                .noneMatch(item -> item.channelCode().equals("ch-b")));
+    }
+
+    @Test
+    @DisplayName("M1 写入式 apiKey：进密钥库，apiKeyRef 为引用，hasApiKey/resolve 可用（R9 不回显）")
+    void model_api_key_roundtrip() {
+        ModelSettingEntity saved = modelSettingService.save(new ModelSettingEntity("ch-key", "渠道K", "openai",
+                "model-k", "http://127.0.0.1:1/v1", "", "openai", true, false), "sk-123");
+        assertEquals("secret:apiKey.ch-key", saved.apiKeyRef());
+        assertTrue(modelSettingService.hasApiKey("ch-key"));
+        assertEquals("sk-123", modelSettingService.resolveApiKey("ch-key"));
+        modelSettingService.delete("ch-key");
+    }
+
+    @Test
+    @DisplayName("M2 激活/删除保护：禁用渠道不可激活，生效渠道不可删")
+    void model_setting_guards() {
+        modelSettingService.save(new ModelSettingEntity("ch-off", "禁用渠道", "openai", "m",
+                "http://127.0.0.1:1/v1", "", "openai", false, false));
+        assertThrows(IllegalArgumentException.class, () -> modelSettingService.activate("ch-off"));
+
+        modelSettingService.save(new ModelSettingEntity("ch-live", "生效渠道", "openai", "m",
+                "http://127.0.0.1:1/v1", "", "openai", true, false));
+        modelSettingService.activate("ch-live");
+        assertThrows(IllegalArgumentException.class, () -> modelSettingService.delete("ch-live"));
+    }
+
+    @Test
+    @DisplayName("P1 插件配置持久化：PluginConfigService 写 → PluginConfigStore（DB）读，删键生效")
+    void plugin_config_persistence() {
+        pluginConfigService.save("demo-plugin", java.util.Map.of("apiKey", "v1", "region", "cn"));
+        assertEquals("v1", pluginConfigStore.get("demo-plugin", "apiKey").orElseThrow());
+        assertEquals("cn", pluginConfigService.get("demo-plugin").get("region"));
+
+        pluginConfigService.deleteKey("demo-plugin", "apiKey");
+        assertTrue(pluginConfigStore.get("demo-plugin", "apiKey").isEmpty());
+        assertEquals("cn", pluginConfigStore.get("demo-plugin", "region").orElseThrow());
     }
 
     @Test
