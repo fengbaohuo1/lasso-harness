@@ -26,6 +26,8 @@ import java.util.Map;
 public class HarnessConsoleQueryController {
 
     private final ISessionEventStore eventStore;
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
 
     public HarnessConsoleQueryController(ISessionEventStore eventStore) {
         this.eventStore = eventStore;
@@ -62,8 +64,15 @@ public class HarnessConsoleQueryController {
         List<Map<String, Object>> blocks = new ArrayList<>();
         for (ContentBlock block : message.blocks()) {
             if (block instanceof ToolCallBlock call) {
+                // 参数出 JSON（Map.toString 会让前端无法解析，回放展示成 {k=v} 杂讯）
+                String argsJson;
+                try {
+                    argsJson = MAPPER.writeValueAsString(call.arguments());
+                } catch (Exception e) {
+                    argsJson = String.valueOf(call.arguments());
+                }
                 blocks.add(Map.of("type", "tool_call", "callId", call.callId(),
-                        "name", call.name(), "arguments", String.valueOf(call.arguments())));
+                        "name", call.name(), "arguments", argsJson));
             } else if (block instanceof ToolResultBlock result) {
                 blocks.add(Map.of("type", "tool_result", "callId", result.callId(),
                         "name", result.name(), "error", result.error(), "content", result.content()));
