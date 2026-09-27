@@ -73,6 +73,8 @@ public class OpenAiCompatibleAdapter implements LlmAdapter {
 
             FinishReason finishReason = null;
             TokenUsage usage = TokenUsage.zero();
+            // 工具调用按流内 index 归并：id 只出现在首片，后续参数增量不带 id
+            java.util.Map<Integer, String> indexToCallId = new java.util.HashMap<>();
             for (String line : (Iterable<String>) response.body()::iterator) {
                 if (emitter.isDone()) {
                     break;
@@ -101,7 +103,8 @@ public class OpenAiCompatibleAdapter implements LlmAdapter {
                     if (toolCalls.isArray()) {
                         for (JsonNode toolCall : toolCalls) {
                             int index = toolCall.path("index").asInt(0);
-                            String callId = toolCall.hasNonNull("id") ? toolCall.get("id").asText() : "call_" + index;
+                            String callId = indexToCallId.computeIfAbsent(index,
+                                    i -> toolCall.hasNonNull("id") ? toolCall.get("id").asText() : "call_" + i);
                             String name = toolCall.path("function").path("name").asText("");
                             String args = toolCall.path("function").path("arguments").asText("");
                             emitter.next(new StreamChunk.ToolCallDelta(callId, name, args));

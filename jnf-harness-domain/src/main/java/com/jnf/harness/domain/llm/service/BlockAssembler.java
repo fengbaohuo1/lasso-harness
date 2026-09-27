@@ -32,7 +32,9 @@ public class BlockAssembler {
         } else if (chunk instanceof StreamChunk.ReasoningDelta delta) {
             reasoning.append(delta.text());
         } else if (chunk instanceof StreamChunk.ToolCallDelta delta) {
-            toolNames.putIfAbsent(delta.callId(), delta.name() == null ? "" : delta.name());
+            // 名称可能只在首片出现：空名后到则补填，已有名字不被覆盖
+            toolNames.merge(delta.callId(), delta.name() == null ? "" : delta.name(),
+                    (oldName, newName) -> oldName.isBlank() ? newName : oldName);
             if (delta.argumentsDelta() != null && !delta.argumentsDelta().isEmpty()) {
                 toolArguments.computeIfAbsent(delta.callId(), k -> new StringBuilder())
                         .append(delta.argumentsDelta());
@@ -48,6 +50,10 @@ public class BlockAssembler {
     public GenerationResult result() {
         List<ToolCallBlock> calls = new ArrayList<>();
         for (Map.Entry<String, String> entry : toolNames.entrySet()) {
+            if (entry.getValue().isBlank()) {
+                // 无名残块不可执行，也不允许回放进下一轮请求（上游会 400）
+                continue;
+            }
             StringBuilder args = toolArguments.get(entry.getKey());
             calls.add(ToolCallBlock.of(entry.getKey(), entry.getValue(), parseArgs(args)));
         }

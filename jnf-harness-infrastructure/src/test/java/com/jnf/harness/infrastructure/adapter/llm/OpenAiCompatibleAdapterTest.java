@@ -135,8 +135,57 @@ class OpenAiCompatibleAdapterTest {
         assertEquals("call_1", deltas.get(0).callId());
         assertEquals("fs_read", deltas.get(0).name());
         assertEquals("{\"pa", deltas.get(0).argumentsDelta());
+        // 参数增量不带 id：必须按 index 归并到同一 callId（否则拆成两个残缺 call）
+        assertEquals("call_1", deltas.get(1).callId());
+        assertEquals("", deltas.get(1).name());
+        assertEquals("th\":\"a\"}", deltas.get(1).argumentsDelta());
         assertEquals(FinishReason.TOOL_CALLS,
                 ((StreamChunk.DoneChunk) chunks.get(chunks.size() - 1)).reason());
+    }
+
+    @Test
+    @DisplayName("并行工具调用按 index 归并 + 装配出完整 ToolCallBlock（真实厂商回放不 400）")
+    void parallel_tool_calls_merge_by_index() {
+        sseBody = """
+                data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_a","function":{"name":"fs_read","arguments":"{\\"pa"}}]}}]}
+
+                data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"call_b","function":{"name":"todo_write","arguments":"{\\"it"}}]}}]}
+
+                data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"th\\":\\"a\\"}"}}]}}]}
+
+                data: {"choices":[{"delta":{"tool_calls":[{"index":1,"function":{"arguments":"ems\\":[]}"}}]},"finish_reason":"tool_calls"}]}
+
+                data: [DONE]
+                """;
+        List<StreamChunk> chunks = collect(new OpenAiCompatibleAdapter().generate(options()));
+
+        com.jnf.harness.domain.llm.service.BlockAssembler assembler =
+                new com.jnf.harness.domain.llm.service.BlockAssembler();
+        chunks.forEach(assembler::accept);
+        List<com.jnf.harness.model.ToolCallBlock> calls = assembler.result().toolCalls();
+
+        assertEquals(2, calls.size());
+        assertEquals("call_a", calls.get(0).callId());
+        assertEquals("fs_read", calls.get(0).name());
+        assertEquals("a", calls.get(0).arguments().get("path"));
+        assertEquals("call_b", calls.get(1).callId());
+        assertEquals("todo_write", calls.get(1).name());
+    }
+
+    @Test
+    @DisplayName("无名残块不装配（防回放进下一轮请求被上游 400 拒收）")
+    void drops_nameless_tool_call_blocks() {
+        sseBody = """
+                data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]},"finish_reason":"tool_calls"}]}
+
+                data: [DONE]
+                """;
+        List<StreamChunk> chunks = collect(new OpenAiCompatibleAdapter().generate(options()));
+
+        com.jnf.harness.domain.llm.service.BlockAssembler assembler =
+                new com.jnf.harness.domain.llm.service.BlockAssembler();
+        chunks.forEach(assembler::accept);
+        assertEquals(0, assembler.result().toolCalls().size());
     }
 
     @Test
