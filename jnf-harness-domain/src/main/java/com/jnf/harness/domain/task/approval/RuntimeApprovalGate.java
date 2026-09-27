@@ -41,7 +41,15 @@ public class RuntimeApprovalGate implements ApprovalGate {
         if (mode == Mode.AUTO_APPROVE || !riskyTool.test(toolName) || service.sessionAllowed(toolName)) {
             return true;
         }
-        PendingApproval pending = service.request(sessionId, toolName, String.valueOf(arguments));
+        // argsJson 必须是 JSON（Map.toString 会让审批卡/回放展示成 {k=v} 杂讯，前端无法解析）
+        String argsJson;
+        try {
+            argsJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(arguments);
+        } catch (Exception e) {
+            argsJson = String.valueOf(arguments);
+        }
+        PendingApproval pending = service.request(sessionId, toolName, argsJson);
         try {
             Verdict verdict = service.decision(pending.id()).get(timeoutSeconds, TimeUnit.SECONDS);
             return verdict == Verdict.ALLOW_ONCE || verdict == Verdict.ALLOW_SESSION;
