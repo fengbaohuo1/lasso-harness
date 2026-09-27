@@ -31,12 +31,14 @@ public interface UserQuestionGateway {
             return future;
         }
 
-        /** 外部回答（UI/REST 层调用）。 */
-        public void answer(String questionId, String answer) {
+        /** 外部回答（UI/REST 层调用）；返回是否命中挂起问题。 */
+        public boolean answer(String questionId, String answer) {
             CompletableFuture<String> future = pending.get(questionId);
             if (future != null) {
                 future.complete(answer);
+                return true;
             }
+            return false;
         }
 
         public java.util.List<Question> pendingQuestions() {

@@ -50,7 +50,8 @@ public class AskUserTool extends AbstractTool {
             return fail("question 不能为空", "MISSING_QUESTION");
         }
         List<String> options = new ArrayList<>();
-        for (String option : str(args, "options").split(",")) {
+        // 选项分隔符兼容半/全角：, ， 、 ; ；
+        for (String option : str(args, "options").split("[,，、;；]")) {
             if (!option.isBlank()) {
                 options.add(option.trim());
             }

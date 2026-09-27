@@ -126,23 +126,12 @@ public class AgentUseCaseImpl implements IAgentApi, IAgentStreamApi {
         return String.valueOf(cause.getMessage());
     }
 
-    /** 参数 map → 紧凑 JSON（仅工具参数这类扁平结构）。 */
+    /** 参数 map → JSON（Jackson：手搓转义不全会让 \U 等非法转义进流，严格解析即炸）。 */
     private static String toJson(java.util.Map<String, Object> args) {
-        StringBuilder sb = new StringBuilder("{");
-        boolean first = true;
-        for (var entry : args.entrySet()) {
-            if (!first) {
-                sb.append(',');
-            }
-            first = false;
-            sb.append('"').append(entry.getKey().replace("\"", "\\\"")).append("\":");
-            Object value = entry.getValue();
-            if (value instanceof Number || value instanceof Boolean) {
-                sb.append(value);
-            } else {
-                sb.append('"').append(String.valueOf(value).replace("\"", "\\\"")).append('"');
-            }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(args);
+        } catch (Exception e) {
+            return String.valueOf(args);
         }
-        return sb.append('}').toString();
     }
 }

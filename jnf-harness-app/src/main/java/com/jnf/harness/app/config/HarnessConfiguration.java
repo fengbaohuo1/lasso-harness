@@ -74,8 +74,9 @@ public class HarnessConfiguration {
     }
 
     @Bean
-    public UserQuestionGateway userQuestionGateway() {
-        return new UserQuestionGateway.InMemoryUserQuestionGateway();
+    public com.jnf.harness.domain.agent.service.ask.UserQuestionGateway.InMemoryUserQuestionGateway userQuestionGateway() {
+        // 具体类型暴露：RuntimeQuestionController 需要 pendingQuestions/answer（M8 问答闭环）
+        return new com.jnf.harness.domain.agent.service.ask.UserQuestionGateway.InMemoryUserQuestionGateway();
     }
 
     @Bean

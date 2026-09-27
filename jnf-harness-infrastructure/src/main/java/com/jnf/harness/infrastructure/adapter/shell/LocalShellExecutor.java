@@ -19,14 +19,18 @@ public class LocalShellExecutor implements IShellExecutor {
     @Override
     public ShellResult execute(String command, Path cwd, long timeoutSeconds) {
         List<String> cmdline = new ArrayList<>();
-        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        if (windows) {
             cmdline.add("cmd");
             cmdline.add("/c");
+            // cmd 内置命令输出编码在 cmd.exe 启动时固化（chcp 对同进程无效，实测证实）：
+            // 外层 chcp 65001 设码页，内层新 cmd 执行用户命令 → 输出 UTF-8，与解码一致
+            cmdline.add("chcp 65001 >nul & cmd /c " + command);
         } else {
             cmdline.add("/bin/sh");
             cmdline.add("-c");
+            cmdline.add(command);
         }
-        cmdline.add(command);
         try {
             Process process = new ProcessBuilder(cmdline)
                     .directory(cwd == null ? null : cwd.toFile())

@@ -4,6 +4,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,7 +37,11 @@ public class TerminalService {
         try {
             boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
             // 持久交互 shell：命令经 stdin 逐行喂入，输出进缓冲
-            Process process = new ProcessBuilder(windows ? "cmd.exe" : "/bin/sh")
+            // cmd 内置命令输出编码在 cmd.exe 启动时固化（chcp 对同进程无效）：
+            // 外层 chcp 65001 设码页，内层新交互 cmd → 输出 UTF-8，与 pump 解码一致
+            Process process = new ProcessBuilder(windows
+                    ? List.of("cmd", "/c", "chcp 65001 >nul & cmd.exe")
+                    : List.of("/bin/sh"))
                     .redirectErrorStream(true)
                     .start();
             Session session = new Session(process);
