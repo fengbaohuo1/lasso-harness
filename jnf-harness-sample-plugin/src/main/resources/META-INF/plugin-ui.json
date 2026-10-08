@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "toolRenderers": {
+    "weather_query": {
+      "title": "天气查询 · {args.city}",
+      "summary": "{result.weather} · {result.temp_c}°C",
+      "blocks": [
+        { "type": "kv", "label": "天气", "source": "result" },
+        { "type": "text", "label": "说明", "source": "result.message" }
+      ]
+    },
+    "file_summary": {
+      "title": "文件摘要",
+      "summary": "{result.lines} 行 / {result.chars} 字符",
+      "blocks": [
+        { "type": "kv", "label": "统计", "source": "result" },
+        { "type": "code", "label": "路径", "source": "result.path", "language": "text" }
+      ]
+    }
+  },
+  "settingsPage": {
+    "title": "Sample Tools 配置",
+    "description": "示例插件独立配置页面（前后端插件统筹模板）：分组表单 + 动作按钮。",
+    "sections": [
+      {
+        "title": "查询偏好",
+        "fields": [
+          { "key": "defaultCity", "label": "默认城市", "type": "text", "placeholder": "Hangzhou", "help": "weather_query 未指定城市时使用" },
+          { "key": "units", "label": "温度单位", "type": "select", "default": "c", "options": [ { "value": "c", "label": "摄氏度" }, { "value": "f", "label": "华氏度" } ] },
+          { "key": "maxLines", "label": "最大摘要行数", "type": "number", "min": 1, "max": 10000, "default": 5000 },
+          { "key": "verbose", "label": "详细输出", "type": "checkbox" }
+        ]
+      },
+      {
+        "title": "连接测试",
+        "fields": [
+          { "key": "note", "label": "备注", "type": "textarea", "placeholder": "任意备注（随测试请求回显）" }
+        ]
+      }
+    ],
+    "actions": [
+      { "label": "测试连接", "method": "POST", "path": "test-connection", "bodyFrom": "form" },
+      { "label": "查看调用统计", "method": "GET", "path": "stats" }
+    ]
+  }
+}

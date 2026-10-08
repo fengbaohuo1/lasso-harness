@@ -49,4 +49,18 @@ public interface PluginContext {
     default <T> Optional<T> lookupService(Class<T> serviceType) {
         return Optional.empty();
     }
+
+    /**
+     * 注册插件 HTTP 端点（SD3，前后端插件统筹）：宿主在
+     * {@code /api/harness/plugins/<pluginId>/api/<path>} 统一鉴权暴露，前端 UI 贡献的
+     * 动作按钮/表单测试即打这里。注册项纳入事务边界，停用/卸载逆序回收。
+     * <p>默认实现抛 {@link UnsupportedOperationException}（旧宿主不支持时明确报错）。
+     *
+     * @param method HTTP 方法（GET/POST/PUT/DELETE，不区分大小写）
+     * @param path   端点内相对路径（如 {@code stats}、{@code export/csv}）
+     */
+    default AutoCloseable registerEndpoint(String method, String path,
+                                           com.jnf.harness.spi.host.PluginHttpHandler handler) {
+        throw new UnsupportedOperationException("当前宿主不支持插件 HTTP 端点（registerEndpoint）");
+    }
 }

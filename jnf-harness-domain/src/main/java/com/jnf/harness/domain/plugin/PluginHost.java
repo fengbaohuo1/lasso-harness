@@ -37,6 +37,7 @@ public class PluginHost {
     private final PluginConfigStore configStore;
     private final Map<Class<?>, Object> hostServices;
     private final com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog;
+    private final PluginEndpointRegistry endpointRegistry;
     private final Map<String, ActivePlugin> active = new ConcurrentHashMap<>();
     private final Map<String, PluginLifecycleState> states = new ConcurrentHashMap<>();
 
@@ -44,7 +45,8 @@ public class PluginHost {
                       SystemPromptAssembler promptAssembler, ToolHookRegistry hookRegistry,
                       PluginEventBus eventBus, PluginConfigStore configStore,
                       Map<Class<?>, Object> hostServices,
-                      com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog) {
+                      com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog,
+                      PluginEndpointRegistry endpointRegistry) {
         this.loader = loader;
         this.toolRegistry = toolRegistry;
         this.promptAssembler = promptAssembler;
@@ -53,6 +55,7 @@ public class PluginHost {
         this.configStore = configStore;
         this.hostServices = hostServices == null ? Map.of() : hostServices;
         this.toolCatalog = toolCatalog;
+        this.endpointRegistry = endpointRegistry;
     }
 
     /** 激活 Java 插件制品（加载 + configure + onStart）；失败回滚并置 FAILED。 */
@@ -67,10 +70,13 @@ public class PluginHost {
             throw new IllegalStateException("插件已激活: " + pluginId);
         }
         HostPluginContext context = new HostPluginContext(loaded.manifest(), toolRegistry,
-                eventBus, hookRegistry, configStore, promptAssembler, hostServices);
+                eventBus, hookRegistry, configStore, promptAssembler, hostServices, endpointRegistry);
         try {
-            loaded.plugin().configure(context);
-            loaded.plugin().onStart();
+            // UI-only 插件（SD4）：plugin 实例可空，只有 UI 贡献清单，无后端入口
+            if (loaded.plugin() != null) {
+                loaded.plugin().configure(context);
+                loaded.plugin().onStart();
+            }
             active.put(pluginId, new ActivePlugin(loaded.manifest(), loaded.plugin(), context, loaded.resource()));
             states.put(pluginId, PluginLifecycleState.ACTIVE);
             registerToolCatalog(context);
@@ -104,7 +110,9 @@ public class PluginHost {
             return;
         }
         try {
-            plugin.plugin().onStop();
+            if (plugin.plugin() != null) {
+                plugin.plugin().onStop();
+            }
         } catch (Exception e) {
             log.warn("插件 onStop 异常: {}: {}", pluginId, e.getMessage());
         }

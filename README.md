@@ -44,6 +44,9 @@ docker build -t jnf-harness .                         # 容器镜像
 - **插件三通道**：Java SPI（隔离 ClassLoader、事务边界逆序回收、热重载）、Node Bridge（JSON-RPC sidecar）、MCP（stdio）
 - **一切皆插件**：内核 jar + 插件 SDK jar（jnf-harness-types）+ N 个插件 jar；官方工具族（fs/shell/web）即插件 jar；
   `plugins/` 目录自动装载（重启即用）+ classpath ServiceLoader 发现（开发/测试）+ `plugin__` 限定名/全局名双命名空间 + sdkVersion 握手
+- **前后端插件统筹**：插件随包携带前端贡献清单 `META-INF/plugin-ui.json`（工具卡渲染器 + **独立配置页面** + 动作按钮）；
+  `registerEndpoint` 注册插件 REST 端点（`/api/harness/plugins/{id}/api/**`，统一鉴权/信封，随插件停用回收）；
+  UI-only 插件（仅清单无后端入口）支持；桌面端按清单运行时渲染，改清单免重编壳
 - **插件管理**：目录发现（catalog）、install/activate/disable/reload/uninstall、配置 KV 持久化、启动自动恢复（ACTIVE 重激活）
 - **治理**：运行期审批（挂起-裁决，审批历史落表）、沙箱三档、命令守卫、任务五子域状态机（防绕过）
 - **会话**：事件溯源（sealed 事件 + WAL + 投影 + 压缩 + 回放/对账）

@@ -7,26 +7,33 @@ import com.jnf.harness.model.ToolRunContext;
 import com.jnf.harness.spi.AbstractHarnessPlugin;
 import com.jnf.harness.spi.PluginContext;
 import com.jnf.harness.spi.PluginHookResult;
+import com.jnf.harness.spi.host.PluginHttpResponse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 示例插件：五注册口全演示。
+ * 示例插件（前后端全栈模板）：注册口全演示 + UI 贡献 + 插件 REST 端点。
  * <ul>
- *   <li>工具：weather_query（假数据）+ file_summary（文件摘要）；</li>
+ *   <li>工具：weather_query（示例数据）+ file_summary（文件摘要）；</li>
  *   <li>提示词：registerSystemPrompt 声明能力与调用时机；</li>
  *   <li>Hook：PRE_TOOL_USE 审计 shell_execute；</li>
  *   <li>事件：订阅 tool.called；</li>
- *   <li>Disposer：资源释放留痕。</li>
+ *   <li>Disposer：资源释放留痕；</li>
+ *   <li>端点（SD3）：GET stats（工具调用计数）、POST test-connection（配置页动作按钮演示）；</li>
+ *   <li>UI 清单（SD1）：META-INF/plugin-ui.json（工具卡渲染器 + 独立配置页面）。</li>
  * </ul>
  */
 public class SampleToolsPlugin extends AbstractHarnessPlugin {
 
     public static final String PLUGIN_ID = "sample-tools";
+
+    private static final AtomicLong WEATHER_QUERIES = new AtomicLong();
+    private static final AtomicLong FILE_SUMMARIES = new AtomicLong();
 
     public SampleToolsPlugin() {
         super(PLUGIN_ID);
@@ -56,9 +63,17 @@ public class SampleToolsPlugin extends AbstractHarnessPlugin {
         context.registerDisposer(() -> {
             // 连接池/线程池等资源在此释放
         });
+        // SD3：插件 REST 端点（/api/harness/plugins/sample-tools/api/**），UI 动作按钮打这里
+        context.registerEndpoint("GET", "stats", request -> PluginHttpResponse.ok(Map.of(
+                "weatherQueries", WEATHER_QUERIES.get(),
+                "fileSummaries", FILE_SUMMARIES.get())));
+        context.registerEndpoint("POST", "test-connection", request -> PluginHttpResponse.ok(Map.of(
+                "ok", true,
+                "message", "sample-tools 连接正常（演示端点）",
+                "echoBody", request.bodyJson() == null ? "" : request.bodyJson())));
     }
 
-    /** 天气查询（示例返回固定数据）。 */
+    /** 天气查询（示例返回固定数据；JSON 结构供 UI 渲染器消费）。 */
     public static class WeatherQueryTool extends AbstractTool {
         @Override
         public String name() {
@@ -81,11 +96,13 @@ public class SampleToolsPlugin extends AbstractHarnessPlugin {
             if (city.isBlank()) {
                 return fail("city 不能为空", "MISSING_CITY");
             }
-            return ok("{\"city\":\"" + city + "\",\"weather\":\"sunny\",\"temp_c\":26}");
+            WEATHER_QUERIES.incrementAndGet();
+            return ok("{\"city\":\"" + city + "\",\"weather\":\"sunny\",\"temp_c\":26,"
+                    + "\"humidity\":60,\"wind\":\"SE 3\"}");
         }
     }
 
-    /** 文件摘要（行数/字符数）。 */
+    /** 文件摘要（行数/字符数；JSON 结构供 UI 渲染器消费）。 */
     public static class FileSummaryTool extends AbstractTool {
         @Override
         public String name() {
@@ -113,7 +130,10 @@ public class SampleToolsPlugin extends AbstractHarnessPlugin {
                     return fail("文件不存在: " + file, "FILE_NOT_FOUND");
                 }
                 String content = Files.readString(file);
-                return ok("lines=" + content.lines().count() + ", chars=" + content.length());
+                FILE_SUMMARIES.incrementAndGet();
+                long lines = content.lines().count();
+                return ok("{\"path\":\"" + file.toString().replace("\\", "\\\\")
+                        + "\",\"lines\":" + lines + ",\"chars\":" + content.length() + "}");
             } catch (Exception e) {
                 return fail("摘要失败: " + e.getMessage(), "SUMMARY_ERROR");
             }

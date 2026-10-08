@@ -89,9 +89,51 @@ public class HarnessPluginController {
             item.put("entrypoint", record.entrypoint());
             item.put("status", record.status());
             item.put("runtimeState", registry.runtimeState(record.pluginId()).name());
+            item.put("hasUi", uiManifest(record.pluginId()).isPresent());
             return item;
         }).toList();
         return Response.success(items);
+    }
+
+    /** SD5：插件前端贡献清单（独立配置页面/工具卡渲染器）；无则 data=null。 */
+    @GetMapping("/{pluginId}/ui")
+    public Response<Object> ui(@PathVariable String pluginId) {
+        return Response.success(uiManifest(pluginId).orElse(null));
+    }
+
+    /** SD5：聚合（仅 ACTIVE），桌面端启动一次拉齐全部 UI 贡献。 */
+    @GetMapping("/ui")
+    public Response<List<Map<String, Object>>> uiAll() {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (PluginInstallationEntity record : registry.list()) {
+            if (!"ACTIVE".equals(record.status())
+                    && registry.runtimeState(record.pluginId())
+                    != com.jnf.harness.spi.PluginLifecycleState.ACTIVE) {
+                continue;
+            }
+            uiManifest(record.pluginId()).ifPresent(manifest -> {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("pluginId", record.pluginId());
+                item.put("ui", manifest);
+                items.add(item);
+            });
+        }
+        return Response.success(items);
+    }
+
+    /** 读取插件 UI 贡献清单（jar 资源/目录文件，sourcePath 相对化后解析）。 */
+    private java.util.Optional<Object> uiManifest(String pluginId) {
+        return registry.get(pluginId)
+                .map(record -> registry.resolveSource(record.sourcePath()))
+                .flatMap(path -> com.jnf.harness.infrastructure.adapter.plugin.PluginUiManifestReader.read(path))
+                .flatMap(json -> {
+                    try {
+                        Object node = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, Object.class);
+                        return java.util.Optional.of(node);
+                    } catch (Exception e) {
+                        return java.util.Optional.empty();
+                    }
+                });
     }
 
     /** P2：目录扫描——可安装候选（含 installed 标记）。 */

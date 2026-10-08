@@ -318,6 +318,12 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.plugin.PluginEndpointRegistry pluginEndpointRegistry() {
+        // SD3：插件 REST 端点注册表（随插件事务边界回收）
+        return new com.jnf.harness.domain.plugin.PluginEndpointRegistry();
+    }
+
+    @Bean
     public com.jnf.harness.domain.plugin.PluginHost pluginHost(
             com.jnf.harness.domain.plugin.IPluginLoaderPort loader,
             ToolRegistry toolRegistry, SystemPromptAssembler promptAssembler,
@@ -325,6 +331,7 @@ public class HarnessConfiguration {
             com.jnf.harness.spi.PluginEventBus eventBus,
             com.jnf.harness.spi.PluginConfigStore configStore,
             com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog,
+            com.jnf.harness.domain.plugin.PluginEndpointRegistry endpointRegistry,
             com.jnf.harness.spi.host.ShellService shellHostService,
             com.jnf.harness.spi.host.WebService webHostService) {
         // P1 宿主服务查询：插件经 lookupService 取得受治理的执行通道
@@ -332,7 +339,8 @@ public class HarnessConfiguration {
                 com.jnf.harness.spi.host.ShellService.class, shellHostService,
                 com.jnf.harness.spi.host.WebService.class, webHostService);
         return new com.jnf.harness.domain.plugin.PluginHost(loader, toolRegistry,
-                promptAssembler, hookRegistry, eventBus, configStore, hostServices, toolCatalog);
+                promptAssembler, hookRegistry, eventBus, configStore, hostServices, toolCatalog,
+                endpointRegistry);
     }
 
     @Bean

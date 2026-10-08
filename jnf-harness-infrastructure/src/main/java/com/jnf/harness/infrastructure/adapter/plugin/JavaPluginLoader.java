@@ -45,7 +45,14 @@ public class JavaPluginLoader implements IPluginLoaderPort {
                     JavaPluginLoader.class.getClassLoader());
 
             JavaHarnessPlugin plugin = instantiate(entrypoint, classLoader);
-            if (!manifest.id().equals(plugin.pluginId())) {
+            if (plugin == null) {
+                // SD4 UI-only 插件：无后端入口，但有前端贡献清单（META-INF/plugin-ui.json）
+                if (!hasUiManifest(manifestValues, classLoader)) {
+                    closeQuietly(classLoader);
+                    throw new IllegalStateException(
+                            "未找到插件入口（entrypoint 或 META-INF/services 均缺失）且无 UI 清单");
+                }
+            } else if (!manifest.id().equals(plugin.pluginId())) {
                 closeQuietly(classLoader);
                 throw new IllegalStateException("pluginId 不一致: 清单=" + manifest.id()
                         + " 实现=" + plugin.pluginId());
@@ -64,10 +71,22 @@ public class JavaPluginLoader implements IPluginLoaderPort {
             Class<?> type = classLoader.loadClass(entrypoint.trim());
             return (JavaHarnessPlugin) type.getDeclaredConstructor().newInstance();
         }
-        for (JavaHarnessPlugin candidate : ServiceLoader.load(JavaHarnessPlugin.class, classLoader)) {
-            return candidate;
+        // ServiceLoader 会枚举父 classpath 上的 provider——只认本制品内的实现，
+        // 否则宿主 classpath 的插件会被误认成本插件（pluginId 不一致或 UI-only 误判）
+        for (ServiceLoader.Provider<JavaHarnessPlugin> provider
+                : ServiceLoader.load(JavaHarnessPlugin.class, classLoader).stream().toList()) {
+            if (provider.type().getClassLoader() != classLoader) {
+                continue;
+            }
+            return provider.get();
         }
-        throw new IllegalStateException("未找到插件入口（entrypoint 或 META-INF/services 均缺失）");
+        return null; // 可能是 UI-only 插件（由 load() 校验 UI 清单）
+    }
+
+    /** 是否带前端贡献清单（plugin.yaml `ui:` 键或 META-INF/plugin-ui.json 资源）。 */
+    private boolean hasUiManifest(Map<String, String> manifestValues, PluginClassLoader classLoader) {
+        String uiPath = manifestValues.getOrDefault("ui", "META-INF/plugin-ui.json");
+        return classLoader.findResource(uiPath) != null;
     }
 
     /** SDK 版本握手（P1）：插件要求版本高于宿主支持值 → 明确报错，替代 NoSuchMethodError 裸炸。 */

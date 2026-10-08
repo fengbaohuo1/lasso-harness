@@ -30,13 +30,15 @@ public class HostPluginContext implements PluginContext, AutoCloseable {
     private final PluginConfigStore configStore;
     private final SystemPromptAssembler promptAssembler;
     private final java.util.Map<Class<?>, Object> hostServices;
+    private final PluginEndpointRegistry endpointRegistry;
     private final List<AutoCloseable> registrations = new ArrayList<>();
     private final List<String> registeredToolNames = new ArrayList<>();
 
     public HostPluginContext(com.jnf.harness.spi.PluginManifest manifest, ToolRegistry toolRegistry,
                              PluginEventBus eventBus, ToolHookRegistry hookRegistry,
                              PluginConfigStore configStore, SystemPromptAssembler promptAssembler,
-                             java.util.Map<Class<?>, Object> hostServices) {
+                             java.util.Map<Class<?>, Object> hostServices,
+                             PluginEndpointRegistry endpointRegistry) {
         this.manifest = Objects.requireNonNull(manifest, "manifest");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
@@ -44,6 +46,7 @@ public class HostPluginContext implements PluginContext, AutoCloseable {
         this.configStore = Objects.requireNonNull(configStore, "configStore");
         this.promptAssembler = Objects.requireNonNull(promptAssembler, "promptAssembler");
         this.hostServices = hostServices == null ? java.util.Map.of() : hostServices;
+        this.endpointRegistry = endpointRegistry;
     }
 
     @Override
@@ -80,6 +83,18 @@ public class HostPluginContext implements PluginContext, AutoCloseable {
     public <T> Optional<T> lookupService(Class<T> serviceType) {
         Object service = hostServices.get(serviceType);
         return service == null ? Optional.empty() : Optional.of(serviceType.cast(service));
+    }
+
+    @Override
+    public AutoCloseable registerEndpoint(String method, String path,
+                                          com.jnf.harness.spi.host.PluginHttpHandler handler) {
+        if (endpointRegistry == null) {
+            throw new UnsupportedOperationException("当前宿主未装配插件端点注册表");
+        }
+        Runnable disposer = endpointRegistry.register(manifest.id(), method, path, handler);
+        AutoCloseable registration = disposer::run;
+        registrations.add(registration);
+        return registration;
     }
 
     @Override
