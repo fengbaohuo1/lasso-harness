@@ -36,26 +36,35 @@ public final class PluginDirectoryResolver {
             if (source == null || source.getLocation() == null) {
                 return Optional.empty();
             }
-            String raw = source.getLocation().toString();
-            // 形如 jar:file:/C:/dist/jnf-harness-app.jar!/BOOT-INF/classes!/ 或 file:/.../target/classes/
-            String path = raw;
+            return dirOfLocation(source.getLocation().toString());
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    /** 由 code source location 串解析制品目录（纯函数，便于覆盖各种 classloader URL 形态）。 */
+    static Optional<Path> dirOfLocation(String location) {
+        try {
+            String path = location;
+            // 形态：Spring Boot 3.2+ nested —— jar:nested:/C:/dist/app.jar/!BOOT-INF/classes!/
+            //      旧式 fat jar —— jar:file:/C:/dist/app.jar!/BOOT-INF/classes!/
+            //      开发态 classes —— file:/C:/proj/target/classes/
+            for (String prefix : new String[]{"jar:", "nested:", "file:"}) {
+                while (path.startsWith(prefix)) {
+                    path = path.substring(prefix.length());
+                }
+            }
             int bang = path.indexOf('!');
             if (bang >= 0) {
                 path = path.substring(0, bang);
-            }
-            if (path.startsWith("jar:")) {
-                path = path.substring(4);
-            }
-            if (path.startsWith("file:")) {
-                path = path.substring(5);
             }
             while (path.startsWith("/") && path.length() > 2 && path.charAt(2) == ':') {
                 path = path.substring(1);
             }
             path = java.net.URLDecoder.decode(path, java.nio.charset.StandardCharsets.UTF_8);
-            Path location = Path.of(path);
+            Path locationPath = Path.of(path);
             // fat jar → jar 所在目录；classes 目录 → 其上级（target/）
-            return Optional.ofNullable(location.getParent());
+            return Optional.ofNullable(locationPath.getParent());
         } catch (Exception e) {
             return Optional.empty();
         }
