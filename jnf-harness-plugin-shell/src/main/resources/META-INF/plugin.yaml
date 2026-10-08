@@ -1,0 +1,8 @@
+id: builtin-shell
+name: 官方 Shell 工具
+version: 1.0.0
+author: jnf
+description: 官方 shell 工具插件（shell_execute），执行通道受宿主治理（命令守卫/超时）。
+entrypoint: com.jnf.harness.plugin.shell.ShellToolsPlugin
+sdkVersion: 1
+toolNamespace: global

@@ -1,4 +1,4 @@
-package com.jnf.harness.domain.tool.fs;
+package com.jnf.harness.plugin.fs;
 
 import com.jnf.harness.model.AbstractTool;
 import com.jnf.harness.model.ToolExecutionResult;

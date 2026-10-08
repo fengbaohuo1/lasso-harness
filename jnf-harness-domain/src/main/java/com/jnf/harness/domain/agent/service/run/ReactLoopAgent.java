@@ -55,7 +55,8 @@ public class ReactLoopAgent {
     private final String agentId;
     private final PersistingSessionLog session;
     private final ILlmRuntimePort llm;
-    private final Supplier<AgentOptions> optionsRef;
+    /** 选项解析（F2）：入参为本 turn 的模型提示（可空）——空=生效渠道；非空=按提示解析渠道/模型。 */
+    private final java.util.function.Function<String, AgentOptions> optionsRef;
     private final ToolRunner toolRunner;
     private final Supplier<List<Map<String, Object>>> toolSchemas;
     private final SystemPromptAssembler promptAssembler;
@@ -71,9 +72,10 @@ public class ReactLoopAgent {
     private final AtomicReference<Flow.Subscription> currentSubscription = new AtomicReference<>();
     private final AtomicReference<CompletableFuture<Void>> currentGeneration = new AtomicReference<>();
     private volatile Phase phase = new Phase.Idle();
+    private volatile String turnModelHint;
 
     public ReactLoopAgent(String agentId, PersistingSessionLog session, ILlmRuntimePort llm,
-                          Supplier<AgentOptions> optionsRef, ToolRunner toolRunner,
+                          java.util.function.Function<String, AgentOptions> optionsRef, ToolRunner toolRunner,
                           Supplier<List<Map<String, Object>>> toolSchemas,
                           SystemPromptAssembler promptAssembler,
                           CompactionEngine compactionEngine, AgentEventListener listener) {
@@ -97,12 +99,18 @@ public class ReactLoopAgent {
 
     /** 提交一条用户消息；future 在对应 turn 结束时完成。 */
     public CompletableFuture<Inbox.TurnSummary> ask(String text) {
-        return ask(text, null);
+        return ask(text, null, null);
     }
 
     /** 提交一条用户消息并挂本问专属流式监听。 */
     public CompletableFuture<Inbox.TurnSummary> ask(String text, AgentEventListener listener) {
-        Inbox.PendingMessage message = new Inbox.PendingMessage(text, new CompletableFuture<>(), listener);
+        return ask(text, null, listener);
+    }
+
+    /** 提交一条用户消息（F2：可带 per-message 模型提示）。 */
+    public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, AgentEventListener listener) {
+        Inbox.PendingMessage message =
+                new Inbox.PendingMessage(text, modelHint, new CompletableFuture<>(), listener);
         inbox.add(message);
         if (started.compareAndSet(false, true)) {
             driver.submit(this::driverLoop);
@@ -169,6 +177,11 @@ public class ReactLoopAgent {
         AtomicBoolean turnAbort = new AtomicBoolean(false);
         phase = new Phase.Running(turnAbort, turn, 0);
         abort.set(false);
+        // F2：本 turn 模型提示（取首个非空；选项解析器按提示解析渠道/模型）
+        turnModelHint = claimed.stream()
+                .map(Inbox.PendingMessage::modelHint)
+                .filter(hint -> hint != null && !hint.isBlank())
+                .findFirst().orElse(null);
         // 事件分发：默认监听 + 本 turn 首个消息的专属监听
         AgentEventListener perTurn = claimed.stream()
                 .map(Inbox.PendingMessage::listener)
@@ -214,6 +227,9 @@ public class ReactLoopAgent {
                     break;
                 }
                 meter.record(result.usage());
+                // R11：token 用量落事件（重启后仍可按会话聚合出用量）
+                session.append(new SessionEvent.Usage(turn, step,
+                        result.usage().promptTokens(), result.usage().completionTokens()));
 
                 if (result.finishReason() == FinishReason.LENGTH
                         && tokenContinuations < options().maxTokenContinuations()) {
@@ -417,7 +433,7 @@ public class ReactLoopAgent {
 
     /** 运行选项（M4：turn/step 级解析，支撑渠道热切换）。 */
     private AgentOptions options() {
-        return optionsRef.get();
+        return optionsRef.apply(turnModelHint);
     }
 
     private long estimateTokens(List<Message> messages) {

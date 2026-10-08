@@ -79,6 +79,12 @@ public final class SessionEventJsonCodec {
             root.put("summary", e.summary());
             ArrayNode seqs = root.putArray("sourceSeqs");
             e.sourceSeqs().forEach(seqs::add);
+        } else if (event instanceof SessionEvent.Usage e) {
+            root.put("type", "usage");
+            root.put("turn", e.turn());
+            root.put("step", e.step());
+            root.put("promptTokens", e.promptTokens());
+            root.put("completionTokens", e.completionTokens());
         }
         return MAPPER.writeValueAsString(root);
     }
@@ -113,6 +119,9 @@ public final class SessionEventJsonCodec {
                 root.path("sourceSeqs").forEach(n -> seqs.add(n.asLong()));
                 yield new SessionEvent.Compacted(root.path("summary").asText(""), seqs);
             }
+            case "usage" -> new SessionEvent.Usage(
+                    root.path("turn").asLong(), root.path("step").asLong(),
+                    root.path("promptTokens").asLong(), root.path("completionTokens").asLong());
             default -> throw new IllegalStateException("未知事件类型: " + type);
         };
         return new SessionEventEntry(seq, event);

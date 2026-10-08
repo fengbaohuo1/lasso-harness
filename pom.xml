@@ -25,6 +25,9 @@
     <module>jnf-harness-infrastructure</module>
     <module>jnf-harness-trigger</module>
     <module>jnf-harness-sample-plugin</module>
+    <module>jnf-harness-plugin-fs</module>
+    <module>jnf-harness-plugin-shell</module>
+    <module>jnf-harness-plugin-web</module>
     <module>jnf-harness-app</module>
   </modules>
 
@@ -77,6 +80,27 @@
       <dependency>
         <groupId>com.jnf.harness</groupId>
         <artifactId>jnf-harness-trigger</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <!-- 官方插件（P2：内核零内置工具；独立 JAR 交付，provided 不进 fat jar） -->
+      <dependency>
+        <groupId>com.jnf.harness</groupId>
+        <artifactId>jnf-harness-plugin-fs</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.jnf.harness</groupId>
+        <artifactId>jnf-harness-plugin-shell</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.jnf.harness</groupId>
+        <artifactId>jnf-harness-plugin-web</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.jnf.harness</groupId>
+        <artifactId>jnf-harness-sample-plugin</artifactId>
         <version>${project.version}</version>
       </dependency>
 

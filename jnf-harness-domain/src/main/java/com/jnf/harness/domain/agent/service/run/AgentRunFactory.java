@@ -24,7 +24,8 @@ public class AgentRunFactory {
 
     private final ILlmRuntimePort llm;
     private final ToolRunner toolRunner;
-    private final Supplier<AgentOptions> optionsSupplier;
+    /** 选项解析（F2）：入参为 per-message 模型提示（可空）。 */
+    private final java.util.function.Function<String, AgentOptions> optionsResolver;
     private final Supplier<List<Map<String, Object>>> toolSchemas;
     private final ISessionEventStore store;
     private final SystemPromptAssembler promptAssembler;
@@ -32,18 +33,29 @@ public class AgentRunFactory {
     private final Map<String, ReactLoopAgent> agents = new ConcurrentHashMap<>();
 
     public AgentRunFactory(ILlmRuntimePort llm, ToolRunner toolRunner,
-                           Supplier<AgentOptions> optionsSupplier,
+                           java.util.function.Function<String, AgentOptions> optionsResolver,
                            Supplier<List<Map<String, Object>>> toolSchemas,
                            ISessionEventStore store,
                            SystemPromptAssembler promptAssembler,
                            CompactionEngine compactionEngine) {
         this.llm = llm;
         this.toolRunner = toolRunner;
-        this.optionsSupplier = optionsSupplier;
+        this.optionsResolver = optionsResolver;
         this.toolSchemas = toolSchemas;
         this.store = store;
         this.promptAssembler = promptAssembler;
         this.compactionEngine = compactionEngine;
+    }
+
+    /** 兼容旧构造面：无 per-message 模型提示语义的选项供应。 */
+    public AgentRunFactory(ILlmRuntimePort llm, ToolRunner toolRunner,
+                           Supplier<AgentOptions> optionsSupplier,
+                           Supplier<List<Map<String, Object>>> toolSchemas,
+                           ISessionEventStore store,
+                           SystemPromptAssembler promptAssembler,
+                           CompactionEngine compactionEngine) {
+        this(llm, toolRunner, hint -> optionsSupplier.get(), toolSchemas, store,
+                promptAssembler, compactionEngine);
     }
 
     public ReactLoopAgent getOrCreate(String agentId, AgentEventListener defaultListener) {
@@ -56,7 +68,7 @@ public class AgentRunFactory {
                 }
             }
             PersistingSessionLog session = new PersistingSessionLog(id, log, store);
-            return new ReactLoopAgent(id, session, llm, optionsSupplier,
+            return new ReactLoopAgent(id, session, llm, optionsResolver,
                     toolRunner, toolSchemas, promptAssembler, compactionEngine, defaultListener);
         });
     }

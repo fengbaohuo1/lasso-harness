@@ -22,4 +22,23 @@ public interface ToolCatalogDao {
     @Select("SELECT tool_code, display_name, description, category, requires_approval "
             + "FROM harness_tool_catalog ORDER BY tool_code")
     List<ToolCatalogPO> findAll();
+
+    /** 幂等登记（存在即保留管理员配置）；H2(MySQL 模式)/MySQL 双兼容的 insert-if-absent。 */
+    @org.apache.ibatis.annotations.Insert(
+            "INSERT INTO harness_tool_catalog (tool_code, display_name, description, category, requires_approval) "
+            + "SELECT #{toolCode}, #{displayName}, #{description}, #{category}, #{requiresApproval} FROM DUAL "
+            + "WHERE NOT EXISTS (SELECT 1 FROM harness_tool_catalog WHERE tool_code = #{toolCode})")
+    int insertIfAbsent(@Param("toolCode") String toolCode,
+                       @Param("displayName") String displayName,
+                       @Param("description") String description,
+                       @Param("category") String category,
+                       @Param("requiresApproval") boolean requiresApproval);
+
+    /** 幂等绑定画像。 */
+    @org.apache.ibatis.annotations.Insert(
+            "INSERT INTO harness_tool_profile_binding (profile_code, tool_code) "
+            + "SELECT #{profileCode}, #{toolCode} FROM DUAL "
+            + "WHERE NOT EXISTS (SELECT 1 FROM harness_tool_profile_binding "
+            + "WHERE profile_code = #{profileCode} AND tool_code = #{toolCode})")
+    int bindIfAbsent(@Param("profileCode") String profileCode, @Param("toolCode") String toolCode);
 }

@@ -9,7 +9,7 @@ import com.jnf.harness.domain.session.event.PersistingSessionLog;
 import com.jnf.harness.domain.session.event.SessionEvent;
 import com.jnf.harness.domain.session.event.SessionLog;
 import com.jnf.harness.domain.session.event.TurnEndReason;
-import com.jnf.harness.domain.tool.fs.FsWriteTool;
+import com.jnf.harness.plugin.fs.FsWriteTool;
 import com.jnf.harness.domain.tool.service.DefaultToolRunContext;
 import com.jnf.harness.domain.tool.service.InMemoryToolRegistry;
 import com.jnf.harness.domain.tool.service.ToolCallExecutor;
@@ -52,7 +52,7 @@ class AgentToolIntegrationTest {
 
         PersistingSessionLog session = new PersistingSessionLog("s-1", new SessionLog(), null);
         ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm,
-                () -> AgentOptions.of("m", LlmChannel.openai("http://127.0.0.1:1", "k")),
+                hint -> AgentOptions.of("m", LlmChannel.openai("http://127.0.0.1:1", "k")),
                 executor, () -> List.of(Map.of("name", "fs_write", "description", "写文件",
                         "parameters", Map.of("type", "object"))),
                 new SystemPromptAssembler(), new BasicCompactionEngine(events -> "摘要"), null);

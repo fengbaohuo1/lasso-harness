@@ -39,5 +39,21 @@
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- P2：内置工具族已外移为官方插件；领域测试把它们当真实工具夹具用（test 依赖，不进交付物） -->
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-fs</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-shell</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-web</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

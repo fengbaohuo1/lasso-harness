@@ -26,8 +26,10 @@ public class AgentDispatchNode extends AbstractStrategyRouter {
         AgentMessageCommand command = context.get("command", AgentMessageCommand.class);
         ReactLoopAgent agent = context.get("agent", ReactLoopAgent.class);
         AgentEventListener listener = context.get("listener", AgentEventListener.class);
-        CompletableFuture<Inbox.TurnSummary> future =
-                listener == null ? agent.ask(command.message()) : agent.ask(command.message(), listener);
+        // F2：per-message model 透传（空=生效渠道；非空=按 modelCode 解析渠道/模型）
+        CompletableFuture<Inbox.TurnSummary> future = listener == null
+                ? agent.ask(command.message(), command.model(), null)
+                : agent.ask(command.message(), command.model(), listener);
         context.put("future", future);
     }
 

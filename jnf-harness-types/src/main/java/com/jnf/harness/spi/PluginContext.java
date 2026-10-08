@@ -40,4 +40,13 @@ public interface PluginContext {
     default String getConfig(String key, String defaultValue) {
         return getConfig(key).orElse(defaultValue);
     }
+
+    /**
+     * 宿主服务查询（P1）：插件按需取得宿主能力（如 {@code spi.host.ShellService}、
+     * {@code spi.host.WebService}），避免插件依赖内核内部端口。
+     * <p>宿主未提供该服务时返回 {@link Optional#empty()}，插件应降级或报友好错误。
+     */
+    default <T> Optional<T> lookupService(Class<T> serviceType) {
+        return Optional.empty();
+    }
 }

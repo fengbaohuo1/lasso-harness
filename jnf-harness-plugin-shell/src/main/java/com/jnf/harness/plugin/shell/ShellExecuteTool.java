@@ -1,24 +1,24 @@
-package com.jnf.harness.domain.tool.shell;
+package com.jnf.harness.plugin.shell;
 
 import com.jnf.harness.model.AbstractTool;
 import com.jnf.harness.model.ToolExecutionResult;
 import com.jnf.harness.model.ToolRunContext;
+import com.jnf.harness.spi.host.ShellService;
 
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * shell 命令执行（修正项 R2：默认策略下先过 {@link ShellCommandGuard}，不裸执行）。
+ * shell 命令执行（修正项 R2：命令守卫内建于宿主 {@link ShellService}，不裸执行）。
+ * <p>官方插件工具（jnf-harness-plugin-shell）：治理在宿主侧，本工具只做参数处理与结果呈现。
  */
 public class ShellExecuteTool extends AbstractTool {
 
-    private final IShellExecutor executor;
-    private final ShellCommandGuard guard;
+    private final ShellService shell;
 
-    public ShellExecuteTool(IShellExecutor executor, ShellCommandGuard guard) {
-        this.executor = executor;
-        this.guard = guard;
+    /** @param shell 宿主服务；可空（宿主未提供时工具降级报错，不阻断插件激活） */
+    public ShellExecuteTool(ShellService shell) {
+        this.shell = shell;
     }
 
     @Override
@@ -46,9 +46,8 @@ public class ShellExecuteTool extends AbstractTool {
         if (command.isBlank()) {
             return fail("command 不能为空", "MISSING_COMMAND");
         }
-        ShellCommandGuard.Decision decision = guard.evaluate(command);
-        if (!decision.allowed()) {
-            return fail("命令被安全策略拦截：" + decision.reason(), "COMMAND_BLOCKED");
+        if (shell == null) {
+            return fail("宿主未提供 ShellService（插件降级）", "NO_HOST_SERVICE");
         }
         long timeout = 60;
         try {
@@ -59,16 +58,14 @@ public class ShellExecuteTool extends AbstractTool {
         } catch (NumberFormatException ignored) {
             // 用默认值
         }
-        try {
-            Path cwd = Path.of(context.cwd()).toAbsolutePath().normalize();
-            ShellResult result = executor.execute(command, cwd, timeout);
-            String output = ("exit=" + result.exitCode() + (result.timedOut() ? "（超时被终止）" : "")
-                    + "\n" + truncate(result.output()));
-            // 非零退出码也是模型可用的正常结果（不是工具失败）
-            return ok(output);
-        } catch (Exception e) {
-            return fail("执行失败: " + e.getMessage(), "SHELL_ERROR");
+        ShellService.ShellOutcome outcome = shell.execute(command, context.cwd(), timeout);
+        if (outcome.denied()) {
+            return fail("命令被安全策略拦截：" + outcome.reason(), "COMMAND_BLOCKED");
         }
+        // 非零退出码也是模型可用的正常结果（不是工具失败）
+        String output = "exit=" + outcome.exitCode() + (outcome.timedOut() ? "（超时被终止）" : "")
+                + "\n" + truncate(outcome.output());
+        return ok(output);
     }
 
     private String truncate(String output) {

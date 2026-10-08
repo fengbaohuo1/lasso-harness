@@ -23,37 +23,63 @@ import java.util.Optional;
  */
 public class HostPluginContext implements PluginContext, AutoCloseable {
 
-    private final String pluginId;
+    private final com.jnf.harness.spi.PluginManifest manifest;
     private final ToolRegistry toolRegistry;
     private final PluginEventBus eventBus;
     private final ToolHookRegistry hookRegistry;
     private final PluginConfigStore configStore;
     private final SystemPromptAssembler promptAssembler;
+    private final java.util.Map<Class<?>, Object> hostServices;
     private final List<AutoCloseable> registrations = new ArrayList<>();
+    private final List<String> registeredToolNames = new ArrayList<>();
 
-    public HostPluginContext(String pluginId, ToolRegistry toolRegistry, PluginEventBus eventBus,
-                             ToolHookRegistry hookRegistry, PluginConfigStore configStore,
-                             SystemPromptAssembler promptAssembler) {
-        this.pluginId = Objects.requireNonNull(pluginId, "pluginId");
+    public HostPluginContext(com.jnf.harness.spi.PluginManifest manifest, ToolRegistry toolRegistry,
+                             PluginEventBus eventBus, ToolHookRegistry hookRegistry,
+                             PluginConfigStore configStore, SystemPromptAssembler promptAssembler,
+                             java.util.Map<Class<?>, Object> hostServices) {
+        this.manifest = Objects.requireNonNull(manifest, "manifest");
         this.toolRegistry = Objects.requireNonNull(toolRegistry, "toolRegistry");
         this.eventBus = Objects.requireNonNull(eventBus, "eventBus");
         this.hookRegistry = Objects.requireNonNull(hookRegistry, "hookRegistry");
         this.configStore = Objects.requireNonNull(configStore, "configStore");
         this.promptAssembler = Objects.requireNonNull(promptAssembler, "promptAssembler");
+        this.hostServices = hostServices == null ? java.util.Map.of() : hostServices;
     }
 
     @Override
     public String pluginId() {
-        return pluginId;
+        return manifest.id();
     }
 
     @Override
     public AutoCloseable registerTool(ToolDefinition tool) {
-        // 限定名注册：plugin__<pluginId>__<toolName>
-        Runnable disposer = toolRegistry.register(new QualifiedTool(pluginId, tool));
+        ToolDefinition registered;
+        if (manifest.globalToolNames()) {
+            // 全局命名（官方插件）：工具身份不随承载形态变化；宿主保证全局唯一
+            if (toolRegistry.lookup(tool.name()).isPresent()) {
+                throw new IllegalStateException("工具名已被占用: " + tool.name());
+            }
+            registered = tool;
+        } else {
+            // 限定名注册：plugin__<pluginId>__<toolName>
+            registered = new QualifiedTool(manifest.id(), tool);
+        }
+        Runnable disposer = toolRegistry.register(registered);
         AutoCloseable registration = disposer::run;
         registrations.add(registration);
+        registeredToolNames.add(registered.name());
         return registration;
+    }
+
+    /** 本插件注册的工具名（宿主用于工具目录自动上架）。 */
+    public List<String> registeredToolNames() {
+        return new ArrayList<>(registeredToolNames);
+    }
+
+    @Override
+    public <T> Optional<T> lookupService(Class<T> serviceType) {
+        Object service = hostServices.get(serviceType);
+        return service == null ? Optional.empty() : Optional.of(serviceType.cast(service));
     }
 
     @Override
@@ -63,14 +89,14 @@ public class HostPluginContext implements PluginContext, AutoCloseable {
 
     @Override
     public AutoCloseable subscribe(String eventName, PluginEventHandler handler) {
-        AutoCloseable disposer = eventBus.subscribe(eventName, pluginId, handler);
+        AutoCloseable disposer = eventBus.subscribe(eventName, manifest.id(), handler);
         registrations.add(disposer);
         return disposer;
     }
 
     @Override
     public void emit(String eventName, Object payload) {
-        eventBus.publish(new PluginEvent(pluginId, eventName, payload, null));
+        eventBus.publish(new PluginEvent(manifest.id(), eventName, payload, null));
     }
 
     @Override
@@ -82,12 +108,12 @@ public class HostPluginContext implements PluginContext, AutoCloseable {
 
     @Override
     public Optional<String> getConfig(String key) {
-        return configStore.get(pluginId, key);
+        return configStore.get(manifest.id(), key);
     }
 
     @Override
     public AutoCloseable registerSystemPrompt(String name, int order, String text) {
-        String qualifiedName = "plugin__" + pluginId + "__" + name;
+        String qualifiedName = "plugin__" + manifest.id() + "__" + name;
         promptAssembler.registerSection(new SystemPromptAssembler.PromptSection(qualifiedName, order, text));
         AutoCloseable disposer = () -> promptAssembler.removeSection(qualifiedName);
         registrations.add(disposer);

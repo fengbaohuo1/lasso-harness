@@ -10,7 +10,7 @@ public sealed interface SessionEvent
         permits SessionEvent.TurnStart, SessionEvent.TurnEnd,
         SessionEvent.StepStart, SessionEvent.StepEnd,
         SessionEvent.UserMessage, SessionEvent.AssistantChunk, SessionEvent.AssistantMessage,
-        SessionEvent.ToolCall, SessionEvent.ToolResult, SessionEvent.Compacted {
+        SessionEvent.ToolCall, SessionEvent.ToolResult, SessionEvent.Compacted, SessionEvent.Usage {
 
     record TurnStart(long turn) implements SessionEvent {
     }
@@ -44,5 +44,9 @@ public sealed interface SessionEvent
 
     /** 压缩事件：summary 概括 sourceSeqs 范围的历史（见压缩引擎）。 */
     record Compacted(String summary, List<Long> sourceSeqs) implements SessionEvent {
+    }
+
+    /** 每次 LLM 调用的 token 用量（R11 计量落事件，重启后仍可聚合）。 */
+    record Usage(long turn, long step, long promptTokens, long completionTokens) implements SessionEvent {
     }
 }

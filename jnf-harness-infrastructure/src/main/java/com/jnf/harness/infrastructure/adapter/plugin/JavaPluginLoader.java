@@ -29,12 +29,15 @@ public class JavaPluginLoader implements IPluginLoaderPort {
             Map<String, String> manifestValues = readManifest(artifact);
             String id = required(manifestValues, "id");
             String entrypoint = manifestValues.getOrDefault("entrypoint", "");
+            int sdkVersion = parseSdkVersion(manifestValues.getOrDefault("sdkVersion", "1"), id);
             PluginManifest manifest = new PluginManifest(id,
                     manifestValues.getOrDefault("name", id),
                     manifestValues.getOrDefault("version", "0.0.0"),
                     manifestValues.getOrDefault("author", ""),
                     manifestValues.getOrDefault("description", ""),
-                    entrypoint);
+                    entrypoint,
+                    sdkVersion,
+                    manifestValues.getOrDefault("toolNamespace", PluginManifest.NAMESPACE_PLUGIN));
 
             URL url = Files.isDirectory(artifact) ? artifact.toUri().toURL()
                     : artifact.toUri().toURL();
@@ -67,6 +70,21 @@ public class JavaPluginLoader implements IPluginLoaderPort {
         throw new IllegalStateException("未找到插件入口（entrypoint 或 META-INF/services 均缺失）");
     }
 
+    /** SDK 版本握手（P1）：插件要求版本高于宿主支持值 → 明确报错，替代 NoSuchMethodError 裸炸。 */
+    private int parseSdkVersion(String raw, String pluginId) {
+        int version;
+        try {
+            version = Integer.parseInt(raw.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalStateException("plugin.yaml sdkVersion 非法: " + raw + "（插件 " + pluginId + "）");
+        }
+        if (version > com.jnf.harness.spi.SdkVersion.CURRENT) {
+            throw new IllegalStateException("插件 " + pluginId + " 需要 SDK v" + version
+                    + "，当前宿主支持 v" + com.jnf.harness.spi.SdkVersion.CURRENT + "，请升级内核");
+        }
+        return version;
+    }
+
     /** 读取 META-INF/plugin.yaml（jar 或目录），解析扁平 key: value。 */
     private Map<String, String> readManifest(Path artifact) throws IOException {
         String content;
@@ -87,6 +105,11 @@ public class JavaPluginLoader implements IPluginLoaderPort {
                 }
             }
         }
+        return parseFlatYaml(content);
+    }
+
+    /** 扁平 plugin.yaml 解析（公开：boot classpath 发现复用）。 */
+    public static Map<String, String> parseFlatYaml(String content) {
         Map<String, String> values = new HashMap<>();
         for (String line : content.split("\\R")) {
             String trimmed = line.trim();

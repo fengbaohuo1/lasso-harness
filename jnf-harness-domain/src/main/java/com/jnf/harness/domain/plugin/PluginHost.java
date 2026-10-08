@@ -35,18 +35,24 @@ public class PluginHost {
     private final ToolHookRegistry hookRegistry;
     private final PluginEventBus eventBus;
     private final PluginConfigStore configStore;
+    private final Map<Class<?>, Object> hostServices;
+    private final com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog;
     private final Map<String, ActivePlugin> active = new ConcurrentHashMap<>();
     private final Map<String, PluginLifecycleState> states = new ConcurrentHashMap<>();
 
     public PluginHost(IPluginLoaderPort loader, ToolRegistry toolRegistry,
                       SystemPromptAssembler promptAssembler, ToolHookRegistry hookRegistry,
-                      PluginEventBus eventBus, PluginConfigStore configStore) {
+                      PluginEventBus eventBus, PluginConfigStore configStore,
+                      Map<Class<?>, Object> hostServices,
+                      com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog) {
         this.loader = loader;
         this.toolRegistry = toolRegistry;
         this.promptAssembler = promptAssembler;
         this.hookRegistry = hookRegistry;
         this.eventBus = eventBus;
         this.configStore = configStore;
+        this.hostServices = hostServices == null ? Map.of() : hostServices;
+        this.toolCatalog = toolCatalog;
     }
 
     /** 激活 Java 插件制品（加载 + configure + onStart）；失败回滚并置 FAILED。 */
@@ -60,18 +66,34 @@ public class PluginHost {
         if (active.containsKey(pluginId)) {
             throw new IllegalStateException("插件已激活: " + pluginId);
         }
-        HostPluginContext context = new HostPluginContext(pluginId, toolRegistry,
-                eventBus, hookRegistry, configStore, promptAssembler);
+        HostPluginContext context = new HostPluginContext(loaded.manifest(), toolRegistry,
+                eventBus, hookRegistry, configStore, promptAssembler, hostServices);
         try {
             loaded.plugin().configure(context);
             loaded.plugin().onStart();
             active.put(pluginId, new ActivePlugin(loaded.manifest(), loaded.plugin(), context, loaded.resource()));
             states.put(pluginId, PluginLifecycleState.ACTIVE);
+            registerToolCatalog(context);
             log.info("插件已激活: {} ({})", pluginId, loaded.manifest().version());
         } catch (Exception e) {
             rollback(context, loaded.resource());
             states.put(pluginId, PluginLifecycleState.FAILED);
             throw new IllegalStateException("插件激活失败: " + pluginId + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** 插件工具自动上架工具目录并绑定 default 画像（R5 治理保留：上架后仍可在目录中停用）。 */
+    private void registerToolCatalog(HostPluginContext context) {
+        if (toolCatalog == null) {
+            return;
+        }
+        for (String toolName : context.registeredToolNames()) {
+            try {
+                toolCatalog.upsert(new com.jnf.harness.domain.runtime.tool.IToolCatalogPort.ToolCatalogEntry(
+                        toolName, toolName, null, "plugin", false), "default");
+            } catch (Exception e) {
+                log.warn("插件工具上架目录失败: {}: {}", toolName, e.getMessage());
+            }
         }
     }
 

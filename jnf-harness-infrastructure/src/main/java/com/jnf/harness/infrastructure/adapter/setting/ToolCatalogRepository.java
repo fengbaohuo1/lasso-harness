@@ -27,6 +27,14 @@ public class ToolCatalogRepository implements IToolCatalogPort {
         return dao.findAll().stream().map(ToolCatalogRepository::toEntry).toList();
     }
 
+    @Override
+    public void upsert(ToolCatalogEntry entry, String profileCode) {
+        dao.insertIfAbsent(entry.toolCode(),
+                entry.displayName() == null ? entry.toolCode() : entry.displayName(),
+                entry.description(), entry.category(), entry.requiresApproval());
+        dao.bindIfAbsent(profileCode, entry.toolCode());
+    }
+
     private static ToolCatalogEntry toEntry(ToolCatalogPO po) {
         return new ToolCatalogEntry(po.getToolCode(), po.getDisplayName(),
                 po.getDescription(), po.getCategory(), po.isRequiresApproval());

@@ -35,11 +35,13 @@ public class HarnessPluginController {
 
     public HarnessPluginController(PluginRegistryService registry, PluginConfigService configService,
                                    IPluginCatalogPort catalog,
-                                   @Value("${harness.plugins.dir:./plugins}") String pluginsDir) {
+                                   @Value("${harness.plugins.dir:}") String pluginsDir) {
         this.registry = registry;
         this.configService = configService;
         this.catalog = catalog;
-        this.pluginsDir = pluginsDir;
+        // P3：未配置时按「jar 同级 plugins/ → ./plugins」解析（多 jar 发布布局零参数启动）
+        this.pluginsDir = com.jnf.harness.domain.plugin.registry.PluginDirectoryResolver
+                .resolve(pluginsDir).toString();
     }
 
     @PostMapping("/install")

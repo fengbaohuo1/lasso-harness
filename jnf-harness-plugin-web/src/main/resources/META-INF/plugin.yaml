@@ -1,0 +1,8 @@
+id: builtin-web
+name: 官方 Web 工具
+version: 1.0.0
+author: jnf
+description: 官方 Web 工具插件（web_fetch/web_search），出网通道经宿主服务。
+entrypoint: com.jnf.harness.plugin.web.WebToolsPlugin
+sdkVersion: 1
+toolNamespace: global

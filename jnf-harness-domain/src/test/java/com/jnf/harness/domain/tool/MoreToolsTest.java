@@ -2,12 +2,12 @@ package com.jnf.harness.domain.tool;
 
 import com.jnf.harness.domain.agent.service.ask.AskUserTool;
 import com.jnf.harness.domain.agent.service.ask.UserQuestionGateway;
-import com.jnf.harness.domain.tool.fs.FsGrepTool;
-import com.jnf.harness.domain.tool.fs.FsReadImageTool;
-import com.jnf.harness.domain.tool.fs.FsSearchTool;
+import com.jnf.harness.plugin.fs.FsGrepTool;
+import com.jnf.harness.plugin.fs.FsReadImageTool;
+import com.jnf.harness.plugin.fs.FsSearchTool;
 import com.jnf.harness.domain.tool.web.IWebPort;
-import com.jnf.harness.domain.tool.web.WebFetchTool;
-import com.jnf.harness.domain.tool.web.WebSearchTool;
+import com.jnf.harness.plugin.web.WebFetchTool;
+import com.jnf.harness.plugin.web.WebSearchTool;
 import com.jnf.harness.domain.todo.TodoService;
 import com.jnf.harness.domain.todo.TodoWriteTool;
 import com.jnf.harness.model.ToolExecutionResult;
@@ -124,8 +124,8 @@ class MoreToolsTest {
                 return Result.fail("搜索服务未配置", "WEB_SEARCH_NOT_CONFIGURED");
             }
         };
-        assertTrue(new WebFetchTool(fake).execute(Map.of("url", "http://x"), ctx).get().success());
-        ToolExecutionResult search = new WebSearchTool(fake).execute(Map.of("query", "hi"), ctx).get();
+        assertTrue(new WebFetchTool(new com.jnf.harness.domain.tool.web.WebHostService(fake)).execute(Map.of("url", "http://x"), ctx).get().success());
+        ToolExecutionResult search = new WebSearchTool(new com.jnf.harness.domain.tool.web.WebHostService(fake)).execute(Map.of("query", "hi"), ctx).get();
         assertFalse(search.success());
         assertEquals("WEB_SEARCH_NOT_CONFIGURED", search.errorCode());
     }

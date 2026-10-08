@@ -80,7 +80,7 @@ class ReactLoopAgentTest {
         PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
         SystemPromptAssembler assembler = new SystemPromptAssembler();
         assembler.registerSection(new SystemPromptAssembler.PromptSection("base", 0, "你是测试智能体。"));
-        return new ReactLoopAgent("agent-1", session, llm, () -> options, runner,
+        return new ReactLoopAgent("agent-1", session, llm, hint -> options, runner,
                 () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
                 assembler,
                 new BasicCompactionEngine(events -> "早期历史摘要"), null);
@@ -128,7 +128,7 @@ class ReactLoopAgentTest {
         AgentOptions[] current = {new AgentOptions("model-1", LlmChannel.openai("http://one:1", "k1"),
                 50, 4, 128_000, 6, 100_000L, null, null)};
         PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
-        ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm, () -> current[0],
+        ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm, hint -> current[0],
                 call -> CompletableFuture.completedFuture(ToolExecutionResult.ok("unused")),
                 () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
                 new SystemPromptAssembler(),
@@ -144,6 +144,29 @@ class ReactLoopAgentTest {
         assertEquals("http://one:1", llm.calls.get(0).channel().baseUrl());
         assertEquals("model-2", llm.calls.get(1).model());
         assertEquals("http://two:1", llm.calls.get(1).channel().baseUrl());
+        agent.shutdown();
+    }
+
+    @Test
+    @DisplayName("F2 per-message 模型提示：带 hint 的消息按提示解析，不带的走默认")
+    void model_hint_reaches_options_resolver() throws Exception {
+        FakeLlm llm = new FakeLlm();
+        llm.scripts.add(text("答一", FinishReason.STOP));
+        llm.scripts.add(text("答二", FinishReason.STOP));
+        PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
+        ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm,
+                hint -> new AgentOptions(hint == null || hint.isBlank() ? "default-model" : hint,
+                        LlmChannel.openai("http://x:1", "k"), 50, 4, 128_000, 6, 100_000L, null, null),
+                call -> CompletableFuture.completedFuture(ToolExecutionResult.ok("unused")),
+                () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
+                new SystemPromptAssembler(),
+                new BasicCompactionEngine(events -> "摘要"), null);
+
+        agent.ask("指定模型", "mimo-v2.6-flash", null).get(5, TimeUnit.SECONDS);
+        agent.ask("默认模型", null, null).get(5, TimeUnit.SECONDS);
+
+        assertEquals("mimo-v2.6-flash", llm.calls.get(0).model());
+        assertEquals("default-model", llm.calls.get(1).model());
         agent.shutdown();
     }
 

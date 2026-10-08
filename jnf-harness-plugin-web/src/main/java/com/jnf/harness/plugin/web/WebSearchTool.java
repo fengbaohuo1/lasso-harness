@@ -1,21 +1,23 @@
-package com.jnf.harness.domain.tool.web;
+package com.jnf.harness.plugin.web;
 
 import com.jnf.harness.model.AbstractTool;
 import com.jnf.harness.model.ToolExecutionResult;
 import com.jnf.harness.model.ToolRunContext;
+import com.jnf.harness.spi.host.WebService;
 
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Web 搜索（依赖 {@link IWebPort#search}；未配置搜索服务时返回结构化失败）。
+ * Web 搜索（依赖宿主 {@link WebService#search}；未配置搜索服务时返回结构化失败）。
  */
 public class WebSearchTool extends AbstractTool {
 
-    private final IWebPort webPort;
+    private final WebService web;
 
-    public WebSearchTool(IWebPort webPort) {
-        this.webPort = webPort;
+    /** @param web 宿主服务；可空（宿主未提供时工具降级报错） */
+    public WebSearchTool(WebService web) {
+        this.web = web;
     }
 
     @Override
@@ -42,7 +44,10 @@ public class WebSearchTool extends AbstractTool {
         if (query.isBlank()) {
             return fail("query 不能为空", "MISSING_QUERY");
         }
-        IWebPort.Result result = webPort.search(query);
+        if (web == null) {
+            return fail("宿主未提供 WebService（插件降级）", "NO_HOST_SERVICE");
+        }
+        WebService.WebOutcome result = web.search(query);
         return result.success() ? ok(result.content())
                 : fail(result.content(), result.errorCode());
     }

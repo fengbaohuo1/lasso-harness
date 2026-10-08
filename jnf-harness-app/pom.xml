@@ -46,11 +46,47 @@
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <!-- P2/P4：官方插件独立 JAR——test scope：不进 fat jar（多 jar 交付，插件只在 plugins/），
+         但进测试 classpath（classpath ServiceLoader 发现通道在测试里生效） -->
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-fs</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-shell</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-web</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
     <finalName>jnf-harness-app</finalName>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <version>3.6.1</version>
+        <executions>
+          <execution>
+            <id>copy-plugin-jars</id>
+            <phase>prepare-package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <includeArtifactIds>jnf-harness-plugin-fs,jnf-harness-plugin-shell,jnf-harness-plugin-web</includeArtifactIds>
+              <excludeTransitive>true</excludeTransitive>
+              <outputDirectory>${project.build.directory}/plugins</outputDirectory>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
@@ -61,6 +97,15 @@
             </goals>
           </execution>
         </executions>
+        <configuration>
+          <!-- 内核 jar 不含插件 jar（多 jar 交付：插件只在 plugins/ 目录，经插件通道加载） -->
+          <excludes>
+            <exclude>
+              <groupId>com.jnf.harness</groupId>
+              <artifactId>jnf-harness-plugin-*</artifactId>
+            </exclude>
+          </excludes>
+        </configuration>
       </plugin>
     </plugins>
   </build>

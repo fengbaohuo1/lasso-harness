@@ -13,23 +13,14 @@ import com.jnf.harness.domain.agent.service.run.AgentRunFactory;
 import com.jnf.harness.domain.llm.adapter.port.ILlmRuntimePort;
 import com.jnf.harness.domain.llm.model.valobj.LlmChannel;
 import com.jnf.harness.domain.session.event.ISessionEventStore;
-import com.jnf.harness.domain.tool.fs.FsGrepTool;
-import com.jnf.harness.domain.tool.fs.FsReadImageTool;
-import com.jnf.harness.domain.tool.fs.FsReadTool;
-import com.jnf.harness.domain.tool.fs.FsSearchTool;
-import com.jnf.harness.domain.tool.fs.FsWriteTool;
-import com.jnf.harness.domain.tool.fs.StrReplaceEditorTool;
 import com.jnf.harness.domain.tool.service.ToolCallExecutor;
 import com.jnf.harness.domain.tool.service.DefaultToolRunContext;
 import com.jnf.harness.domain.tool.service.InMemoryToolRegistry;
 import com.jnf.harness.domain.tool.service.ToolRegistry;
 import com.jnf.harness.domain.tool.shell.ShellCommandGuard;
 import com.jnf.harness.domain.tool.shell.ShellCommandPolicy;
-import com.jnf.harness.domain.tool.shell.ShellExecuteTool;
 import com.jnf.harness.domain.tool.shell.IShellExecutor;
 import com.jnf.harness.domain.tool.web.IWebPort;
-import com.jnf.harness.domain.tool.web.WebFetchTool;
-import com.jnf.harness.domain.tool.web.WebSearchTool;
 import com.jnf.harness.domain.todo.TodoService;
 import com.jnf.harness.domain.todo.TodoWriteTool;
 import com.jnf.harness.infrastructure.adapter.eventstore.JsonlSessionEventStore;
@@ -85,8 +76,7 @@ public class HarnessConfiguration {
     }
 
     @Bean
-    public ToolRegistry toolRegistry(IShellExecutor shellExecutor, IWebPort webPort,
-                                     UserQuestionGateway userQuestionGateway, TodoService todoService,
+    public ToolRegistry toolRegistry(UserQuestionGateway userQuestionGateway, TodoService todoService,
                                      com.jnf.harness.domain.goal.GoalService goalService,
                                      com.jnf.harness.domain.jobs.JobRegistryService jobService,
                                      com.jnf.harness.domain.schedule.ScheduleService scheduleService,
@@ -94,17 +84,9 @@ public class HarnessConfiguration {
                                      com.jnf.harness.domain.terminal.TerminalService terminalService,
                                      com.jnf.harness.domain.extension.ExtensionManagementService extensionService,
                                      ISessionEventStore sessionEventStore) {
+        // P2：内核零内置工具——fs/shell/web 族由官方插件 JAR（jnf-harness-plugin-*）
+        // 经 plugins/ 目录或 classpath 发现激活注册；这里只留依赖领域服务的内核工具
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
-        registry.register(new FsReadTool());
-        registry.register(new FsWriteTool());
-        registry.register(new FsSearchTool());
-        registry.register(new FsGrepTool());
-        registry.register(new FsReadImageTool());
-        registry.register(new StrReplaceEditorTool());
-        registry.register(new ShellExecuteTool(shellExecutor,
-                new ShellCommandGuard(ShellCommandPolicy.defaultPolicy())));
-        registry.register(new WebFetchTool(webPort));
-        registry.register(new WebSearchTool(webPort));
         registry.register(new AskUserTool(userQuestionGateway, 300));
         registry.register(new TodoWriteTool(todoService));
         // 第 12 节：jobs / goal / schedule / plan 工具族
@@ -118,6 +100,27 @@ public class HarnessConfiguration {
         registry.register(new com.jnf.harness.domain.session.SessionSearchTool(sessionEventStore));
         registry.register(new com.jnf.harness.domain.lsp.LspTool());
         return registry;
+    }
+
+    /** 宿主服务（P1）：受治理 shell 执行通道（R2 命令守卫内建），供 shell 工具插件查询。 */
+    @Bean
+    public com.jnf.harness.spi.host.ShellService shellHostService(
+            IShellExecutor shellExecutor,
+            com.jnf.harness.domain.tool.shell.ShellCommandPolicy shellCommandPolicy) {
+        return new com.jnf.harness.domain.tool.shell.ShellHostService(shellExecutor,
+                new com.jnf.harness.domain.tool.shell.ShellCommandGuard(shellCommandPolicy),
+                Path.of("").toAbsolutePath());
+    }
+
+    @Bean
+    public com.jnf.harness.domain.tool.shell.ShellCommandPolicy shellCommandPolicy() {
+        return com.jnf.harness.domain.tool.shell.ShellCommandPolicy.defaultPolicy();
+    }
+
+    /** 宿主服务（P1）：Web 出网通道，供 web 工具插件查询。 */
+    @Bean
+    public com.jnf.harness.spi.host.WebService webHostService(IWebPort webPort) {
+        return new com.jnf.harness.domain.tool.web.WebHostService(webPort);
     }
 
     // ---------------- 第 12b 节：workflow / terminal / extension ----------------
@@ -320,9 +323,16 @@ public class HarnessConfiguration {
             ToolRegistry toolRegistry, SystemPromptAssembler promptAssembler,
             com.jnf.harness.domain.tool.service.ToolHookRegistry hookRegistry,
             com.jnf.harness.spi.PluginEventBus eventBus,
-            com.jnf.harness.spi.PluginConfigStore configStore) {
+            com.jnf.harness.spi.PluginConfigStore configStore,
+            com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog,
+            com.jnf.harness.spi.host.ShellService shellHostService,
+            com.jnf.harness.spi.host.WebService webHostService) {
+        // P1 宿主服务查询：插件经 lookupService 取得受治理的执行通道
+        Map<Class<?>, Object> hostServices = Map.of(
+                com.jnf.harness.spi.host.ShellService.class, shellHostService,
+                com.jnf.harness.spi.host.WebService.class, webHostService);
         return new com.jnf.harness.domain.plugin.PluginHost(loader, toolRegistry,
-                promptAssembler, hookRegistry, eventBus, configStore);
+                promptAssembler, hookRegistry, eventBus, configStore, hostServices, toolCatalog);
     }
 
     @Bean
@@ -352,16 +362,24 @@ public class HarnessConfiguration {
             com.jnf.harness.domain.plugin.registry.IPluginInstallationRepository repository,
             com.jnf.harness.domain.plugin.PluginHost pluginHost,
             com.jnf.harness.domain.plugin.INodePluginLoaderPort nodePluginLoader,
-            com.jnf.harness.domain.plugin.registry.IPluginRuntimeBindingRepository runtimeBinding) {
+            com.jnf.harness.domain.plugin.registry.IPluginRuntimeBindingRepository runtimeBinding,
+            @Value("${harness.plugins.dir:}") String configuredPluginsDir) {
+        // P3：sourcePath 相对化按当前插件目录重解析（跨机器可迁移）
         return new com.jnf.harness.domain.plugin.registry.PluginRegistryService(
-                repository, pluginHost, nodePluginLoader, runtimeBinding);
+                repository, pluginHost, nodePluginLoader, runtimeBinding,
+                com.jnf.harness.domain.plugin.registry.PluginDirectoryResolver.resolve(configuredPluginsDir));
     }
 
     @Bean
     public com.jnf.harness.app.boot.PluginBootActivator pluginBootActivator(
-            com.jnf.harness.domain.plugin.registry.PluginRegistryService registry) {
-        // P3：重启后 ACTIVE 插件自动恢复
-        return new com.jnf.harness.app.boot.PluginBootActivator(registry);
+            com.jnf.harness.domain.plugin.registry.PluginRegistryService registry,
+            com.jnf.harness.domain.plugin.PluginHost pluginHost,
+            com.jnf.harness.domain.plugin.registry.IPluginCatalogPort catalog,
+            @Value("${harness.plugins.dir:}") String configuredPluginsDir,
+            @Value("${harness.plugins.auto-load:true}") boolean autoLoad) {
+        // P3：目录自动装载 + DB 恢复 + classpath 发现
+        return new com.jnf.harness.app.boot.PluginBootActivator(
+                registry, pluginHost, catalog, configuredPluginsDir, autoLoad);
     }
 
     @Bean
@@ -378,9 +396,25 @@ public class HarnessConfiguration {
         return new BasicCompactionEngine(events -> "[摘要] 此前 " + events.size() + " 条消息事件已压缩。");
     }
 
+    /** 会话事件/元数据根目录（F3：meta.json 与 events.jsonl 同目录）。 */
+    public static final String EVENTS_DIR_PROPERTY = "harness.events.dir";
+
     @Bean
-    public ISessionEventStore sessionEventStore() {
-        return new JsonlSessionEventStore(Path.of("./data/events"));
+    public ISessionEventStore sessionEventStore(
+            @Value("${harness.events.dir:./data/events}") String eventsRoot) {
+        return new JsonlSessionEventStore(Path.of(eventsRoot));
+    }
+
+    @Bean
+    public com.jnf.harness.domain.session.meta.ISessionMetaStore sessionMetaStore(
+            @Value("${harness.events.dir:./data/events}") String eventsRoot) {
+        return new com.jnf.harness.infrastructure.adapter.session.FileSessionMetaStore(Path.of(eventsRoot));
+    }
+
+    @Bean
+    public com.jnf.harness.domain.session.meta.SessionMetaService sessionMetaService(
+            com.jnf.harness.domain.session.meta.ISessionMetaStore store) {
+        return new com.jnf.harness.domain.session.meta.SessionMetaService(store);
     }
 
     // ---------------- 第 8 节：持久化与模型渠道 ----------------
@@ -442,24 +476,48 @@ public class HarnessConfiguration {
                                            @Value("${harness.llm.default.base-url}") String baseUrl,
                                            @Value("${harness.llm.default.api-key}") String apiKey,
                                            @Value("${harness.llm.default.model}") String model) {
-        // R5：工具目录真接线——只暴露 default 画像启用的工具
-        java.util.Set<String> enabled = toolCatalogPort.findEnabled("default").stream()
-                .map(com.jnf.harness.domain.runtime.tool.IToolCatalogPort.ToolCatalogEntry::toolCode)
-                .collect(java.util.stream.Collectors.toSet());
-        List<Map<String, Object>> schemas = new ArrayList<>();
-        for (ToolDefinition tool : toolRegistry.list()) {
-            if (!enabled.isEmpty() && !enabled.contains(tool.name())) {
-                continue;
+        // R5：工具目录真接线——只暴露 default 画像启用的工具。
+        // P3 修复：schema 每次现算（插件激活在 ApplicationRunner，晚于 Bean 构建；
+        // 冻结快照会让插件工具永远不进模型工具表）
+        java.util.function.Supplier<List<Map<String, Object>>> schemasSupplier = () -> {
+            java.util.Set<String> enabled = toolCatalogPort.findEnabled("default").stream()
+                    .map(com.jnf.harness.domain.runtime.tool.IToolCatalogPort.ToolCatalogEntry::toolCode)
+                    .collect(java.util.stream.Collectors.toSet());
+            List<Map<String, Object>> schemas = new ArrayList<>();
+            for (ToolDefinition tool : toolRegistry.list()) {
+                if (!enabled.isEmpty() && !enabled.contains(tool.name())) {
+                    continue;
+                }
+                Map<String, Object> schema = new LinkedHashMap<>();
+                schema.put("name", tool.name());
+                schema.put("description", tool.description());
+                schema.put("parameters", tool.parameters());
+                schemas.add(schema);
             }
-            Map<String, Object> schema = new LinkedHashMap<>();
-            schema.put("name", tool.name());
-            schema.put("description", tool.description());
-            schema.put("parameters", tool.parameters());
-            schemas.add(schema);
-        }
-        List<Map<String, Object>> finalSchemas = schemas;
-        // 模型渠道：DB 生效渠道优先，文件配置兜底（对齐参照语义）
-        java.util.function.Supplier<AgentOptions> optionsSupplier = () -> {
+            return schemas;
+        };
+        // F2：模型解析——per-message 模型提示优先（命中 modelCode 的渠道整渠道切换；
+        // 未命中作模型名覆盖在生效渠道上）；空提示=生效渠道，文件配置兜底
+        java.util.function.Function<String, AgentOptions> optionsResolver = hint -> {
+            if (hint != null && !hint.isBlank()) {
+                var byModel = modelSettingService.list().stream()
+                        .filter(m -> hint.equals(m.modelCode()))
+                        .findFirst();
+                if (byModel.isPresent()) {
+                    var setting = byModel.get();
+                    return AgentOptions.of(setting.modelCode(), new LlmChannel(setting.baseUrl(),
+                            modelSettingService.secrets().resolve(setting.apiKeyRef()),
+                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol())));
+                }
+                var active = modelSettingService.active();
+                if (active.isPresent()) {
+                    var setting = active.get();
+                    return AgentOptions.of(hint, new LlmChannel(setting.baseUrl(),
+                            modelSettingService.secrets().resolve(setting.apiKeyRef()),
+                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol())));
+                }
+                return AgentOptions.of(hint, LlmChannel.openai(baseUrl, apiKey));
+            }
             var active = modelSettingService.active();
             if (active.isPresent()) {
                 var setting = active.get();
@@ -469,8 +527,8 @@ public class HarnessConfiguration {
             }
             return AgentOptions.of(model, LlmChannel.openai(baseUrl, apiKey));
         };
-        return new AgentRunFactory(llmRuntimePort, toolRunner, optionsSupplier,
-                () -> finalSchemas, store, promptAssembler, compactionEngine);
+        return new AgentRunFactory(llmRuntimePort, toolRunner, optionsResolver,
+                schemasSupplier, store, promptAssembler, compactionEngine);
     }
 
     @Bean

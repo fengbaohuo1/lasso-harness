@@ -1,8 +1,8 @@
 package com.jnf.harness.domain.tool.service;
 
-import com.jnf.harness.domain.tool.fs.FsReadTool;
-import com.jnf.harness.domain.tool.fs.FsWriteTool;
-import com.jnf.harness.domain.tool.fs.StrReplaceEditorTool;
+import com.jnf.harness.plugin.fs.FsReadTool;
+import com.jnf.harness.plugin.fs.FsWriteTool;
+import com.jnf.harness.plugin.fs.StrReplaceEditorTool;
 import com.jnf.harness.domain.tool.shell.ShellCommandGuard;
 import com.jnf.harness.domain.tool.shell.ShellCommandPolicy;
 import com.jnf.harness.model.ToolCallBlock;

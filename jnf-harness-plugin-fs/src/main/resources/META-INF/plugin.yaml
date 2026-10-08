@@ -1,0 +1,8 @@
+id: builtin-fs
+name: 官方文件工具族
+version: 1.0.0
+author: jnf
+description: 官方文件工具插件（fs_read/fs_write/fs_search/fs_grep/fs_read_image/str_replace_editor）。
+entrypoint: com.jnf.harness.plugin.fs.FsToolsPlugin
+sdkVersion: 1
+toolNamespace: global
