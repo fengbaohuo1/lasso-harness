@@ -228,3 +228,16 @@ WHERE NOT EXISTS (SELECT 1 FROM harness_tool_catalog WHERE tool_code = 'todo_wri
 INSERT INTO harness_tool_profile_binding (profile_code, tool_code)
 SELECT 'default', tool_code FROM harness_tool_catalog
 WHERE NOT EXISTS (SELECT 1 FROM harness_tool_profile_binding WHERE profile_code = 'default');
+
+-- 工具目录种子自愈（修复历史 GBK 乱码行：SQL 初始化曾按平台编码解码 UTF-8 脚本）
+UPDATE harness_tool_catalog SET display_name = '读取文件', description = '读取文件内容' WHERE tool_code = 'fs_read';
+UPDATE harness_tool_catalog SET display_name = '写入文件', description = '写入（覆盖）文件' WHERE tool_code = 'fs_write';
+UPDATE harness_tool_catalog SET display_name = '文件搜索', description = 'glob 搜索文件路径' WHERE tool_code = 'fs_search';
+UPDATE harness_tool_catalog SET display_name = '内容搜索', description = '正则搜索文件内容' WHERE tool_code = 'fs_grep';
+UPDATE harness_tool_catalog SET display_name = '读取图片', description = '读取图片为 data URI' WHERE tool_code = 'fs_read_image';
+UPDATE harness_tool_catalog SET display_name = '精确替换', description = '唯一命中的字符串替换' WHERE tool_code = 'str_replace_editor';
+UPDATE harness_tool_catalog SET display_name = '执行命令', description = 'shell 命令执行（策略受控）' WHERE tool_code = 'shell_execute';
+UPDATE harness_tool_catalog SET display_name = '抓取网页', description = '抓取 URL 内容' WHERE tool_code = 'web_fetch';
+UPDATE harness_tool_catalog SET display_name = '网页搜索', description = '搜索网页' WHERE tool_code = 'web_search';
+UPDATE harness_tool_catalog SET display_name = '向用户提问', description = '澄清问题并等待回答' WHERE tool_code = 'ask_user_question';
+UPDATE harness_tool_catalog SET display_name = '待办更新', description = '整表更新待办清单' WHERE tool_code = 'todo_write';

@@ -12,6 +12,8 @@ spring:
   sql:
     init:
       mode: always
+      # 种子脚本含中文：必须显式 UTF-8（默认跟平台 GBK 会把 display_name 插成乱码）
+      encoding: UTF-8
 
 mybatis:
   configuration:

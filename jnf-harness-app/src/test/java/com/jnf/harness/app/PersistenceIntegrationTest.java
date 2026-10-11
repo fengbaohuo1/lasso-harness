@@ -138,14 +138,22 @@ class PersistenceIntegrationTest {
     }
 
     @Test
-    @DisplayName("种子幂等：schema.sql 跑两遍数量不变（冷启动两次不重复播种）")
+    @DisplayName("种子幂等：schema.sql 跑两遍数量不变（冷启动两次不重复播种）；中文种子不乱码（编码回归）")
     void seed_is_idempotent() {
         int before = toolCatalogDao.findAll().size();
         assertTrue(before >= 11, "工具目录种子应≥11，实际 " + before);
-        // 模拟第二次冷启动的 schema 初始化
-        org.springframework.jdbc.datasource.init.DatabasePopulatorUtils.execute(
-                new ResourceDatabasePopulator(new ClassPathResource("schema.sql")), dataSource);
+        // 模拟第二次冷启动的 schema 初始化（显式 UTF-8，与 application.yml 的 spring.sql.init.encoding 一致）
+        ResourceDatabasePopulator populator =
+                new ResourceDatabasePopulator(new ClassPathResource("schema.sql"));
+        populator.setSqlScriptEncoding("UTF-8");
+        org.springframework.jdbc.datasource.init.DatabasePopulatorUtils.execute(populator, dataSource);
         assertEquals(before, toolCatalogDao.findAll().size());
+        // 编码回归：中文 display_name/description 不能被 GBK 解码成乱码（历史 bug：SQL 初始化跟平台编码）
+        com.jnf.harness.infrastructure.dao.po.ToolCatalogPO ask = toolCatalogDao.findAll().stream()
+                .filter(e -> "ask_user_question".equals(e.getToolCode()))
+                .findFirst().orElseThrow();
+        assertEquals("向用户提问", ask.getDisplayName());
+        assertEquals("澄清问题并等待回答", ask.getDescription());
     }
 
     @Test
