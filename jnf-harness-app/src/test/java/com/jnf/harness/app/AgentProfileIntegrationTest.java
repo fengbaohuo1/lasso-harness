@@ -61,6 +61,9 @@ class AgentProfileIntegrationTest {
         assertEquals("faq-tools", resolved.toolProfile());
         assertTrue(resolved.promptExtra().contains("简答"));
         assertEquals(50, profileService.resolve("unknown").maxStepsPerTurn(), "未知画像回落缺省");
+        assertTrue(profileService.list().stream()
+                        .anyMatch(p -> "default".equals(p.profileCode())),
+                "列表恒含 default（虚拟行也有锚点）");
 
         // default 删除保护
         assertEquals("40000", controller.delete("default").code());

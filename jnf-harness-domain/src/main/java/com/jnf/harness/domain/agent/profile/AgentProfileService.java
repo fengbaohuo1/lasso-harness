@@ -27,7 +27,17 @@ public class AgentProfileService {
     }
 
     public List<AgentProfile> list() {
-        return repository.findAll();
+        List<AgentProfile> rows = repository.findAll();
+        boolean hasDefault = rows.stream()
+                .anyMatch(p -> AgentProfile.DEFAULT_CODE.equals(p.profileCode()));
+        if (hasDefault) {
+            return rows;
+        }
+        // default 画像可虚拟存在（无行）——列表恒含它，管理面才有锚点
+        List<AgentProfile> merged = new java.util.ArrayList<>(rows.size() + 1);
+        merged.add(AgentProfile.defaults());
+        merged.addAll(rows);
+        return merged;
     }
 
     public AgentProfile upsert(AgentProfile profile) {
