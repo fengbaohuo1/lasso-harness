@@ -41,4 +41,9 @@ public interface ToolCatalogDao {
             + "WHERE NOT EXISTS (SELECT 1 FROM harness_tool_profile_binding "
             + "WHERE profile_code = #{profileCode} AND tool_code = #{toolCode})")
     int bindIfAbsent(@Param("profileCode") String profileCode, @Param("toolCode") String toolCode);
+
+    /** 清空某画像的工具绑定（A1 白名单整体替换用）。 */
+    @org.apache.ibatis.annotations.Delete(
+            "DELETE FROM harness_tool_profile_binding WHERE profile_code = #{profileCode}")
+    int deleteBindings(@Param("profileCode") String profileCode);
 }

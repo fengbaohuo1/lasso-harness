@@ -35,6 +35,15 @@ public class ToolCatalogRepository implements IToolCatalogPort {
         dao.bindIfAbsent(profileCode, entry.toolCode());
     }
 
+    @Override
+    public void replaceBindings(String profileCode, java.util.List<String> toolCodes) {
+        dao.deleteBindings(profileCode);
+        if (toolCodes != null) {
+            toolCodes.stream().filter(code -> code != null && !code.isBlank())
+                    .forEach(code -> dao.bindIfAbsent(profileCode, code.trim()));
+        }
+    }
+
     private static ToolCatalogEntry toEntry(ToolCatalogPO po) {
         return new ToolCatalogEntry(po.getToolCode(), po.getDisplayName(),
                 po.getDescription(), po.getCategory(), po.isRequiresApproval());

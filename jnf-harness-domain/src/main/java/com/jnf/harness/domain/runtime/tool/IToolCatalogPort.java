@@ -18,6 +18,9 @@ public interface IToolCatalogPort {
      */
     void upsert(ToolCatalogEntry entry, String profileCode);
 
+    /** 整体替换某画像的工具绑定（A1 画像白名单管理；toolCodes 为空 = 清空绑定，回落全量语义）。 */
+    void replaceBindings(String profileCode, List<String> toolCodes);
+
     /** 目录条目。 */
     record ToolCatalogEntry(String toolCode, String displayName, String description,
                             String category, boolean requiresApproval) {
