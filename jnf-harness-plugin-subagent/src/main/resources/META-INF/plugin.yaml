@@ -1,0 +1,8 @@
+id: subagent
+name: 官方子智能体插件
+version: 1.0.0
+author: jnf
+description: 默认子智能体插件（delegate_task）：把独立子任务派发给子智能体执行（独立会话/独立预算，宿主治理深度与超时）。
+entrypoint: com.jnf.harness.plugin.subagent.SubagentPlugin
+sdkVersion: 1
+toolNamespace: global

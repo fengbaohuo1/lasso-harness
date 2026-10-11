@@ -31,14 +31,23 @@ public class HarnessPluginController {
     private final PluginRegistryService registry;
     private final PluginConfigService configService;
     private final IPluginCatalogPort catalog;
+    private final com.jnf.harness.domain.plugin.PluginHost pluginHost;
+    private final com.jnf.harness.domain.plugin.PluginEndpointRegistry endpointRegistry;
+    private final com.jnf.harness.domain.tool.service.ToolRegistry toolRegistry;
     private final String pluginsDir;
 
     public HarnessPluginController(PluginRegistryService registry, PluginConfigService configService,
                                    IPluginCatalogPort catalog,
+                                   com.jnf.harness.domain.plugin.PluginHost pluginHost,
+                                   com.jnf.harness.domain.plugin.PluginEndpointRegistry endpointRegistry,
+                                   com.jnf.harness.domain.tool.service.ToolRegistry toolRegistry,
                                    @Value("${harness.plugins.dir:}") String pluginsDir) {
         this.registry = registry;
         this.configService = configService;
         this.catalog = catalog;
+        this.pluginHost = pluginHost;
+        this.endpointRegistry = endpointRegistry;
+        this.toolRegistry = toolRegistry;
         // P3：未配置时按「jar 同级 plugins/ → ./plugins」解析（多 jar 发布布局零参数启动）
         this.pluginsDir = com.jnf.harness.domain.plugin.registry.PluginDirectoryResolver
                 .resolve(pluginsDir).toString();
@@ -121,19 +130,65 @@ public class HarnessPluginController {
         return Response.success(items);
     }
 
-    /** 读取插件 UI 贡献清单（jar 资源/目录文件，sourcePath 相对化后解析）。 */
+    /** 读取插件 UI 贡献清单（jar 资源/目录文件，sourcePath 相对化后解析；
+     *  classpath 插件不落安装表 → 按插件类 code source 精确定位制品兜底，P8-2）。 */
     private java.util.Optional<Object> uiManifest(String pluginId) {
-        return registry.get(pluginId)
+        java.util.Optional<Object> viaRegistry = registry.get(pluginId)
                 .map(record -> registry.resolveSource(record.sourcePath()))
                 .flatMap(path -> com.jnf.harness.infrastructure.adapter.plugin.PluginUiManifestReader.read(path))
-                .flatMap(json -> {
-                    try {
-                        Object node = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, Object.class);
-                        return java.util.Optional.of(node);
-                    } catch (Exception e) {
-                        return java.util.Optional.empty();
-                    }
-                });
+                .flatMap(HarnessPluginController::parseManifest);
+        if (viaRegistry.isPresent()) {
+            return viaRegistry;
+        }
+        return pluginHost.artifactOf(pluginId)
+                .flatMap(com.jnf.harness.infrastructure.adapter.plugin.PluginUiManifestReader::read)
+                .flatMap(HarnessPluginController::parseManifest);
+    }
+
+    private static java.util.Optional<Object> parseManifest(String json) {
+        try {
+            Object node = new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, Object.class);
+            return java.util.Optional.of(node);
+        } catch (Exception e) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    /** P8-2：插件贡献面聚合——「这个插件到底注册了什么」一屏看全（工具/端点/UI 声明）。 */
+    @GetMapping("/{pluginId}/contributions")
+    public Response<Map<String, Object>> contributions(@PathVariable String pluginId) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("pluginId", pluginId);
+        data.put("runtimeState", registry.runtimeState(pluginId).name());
+        List<Map<String, Object>> tools = new ArrayList<>();
+        for (String name : pluginHost.toolNamesOf(pluginId)) {
+            Map<String, Object> tool = new LinkedHashMap<>();
+            tool.put("name", name);
+            tool.put("description", toolRegistry.lookup(name)
+                    .map(com.jnf.harness.model.ToolDefinition::description).orElse(null));
+            tools.add(tool);
+        }
+        data.put("tools", tools);
+        data.put("endpoints", endpointRegistry.list(pluginId));
+        Object manifest = uiManifest(pluginId).orElse(null);
+        data.put("ui", manifest);
+        Object slashCommands = java.util.List.of();
+        Object mentionProviders = java.util.List.of();
+        boolean hasSettingsPage = false;
+        Object settingsPageTitle = null;
+        if (manifest instanceof Map<?, ?> ui) {
+            slashCommands = ui.get("slashCommands") == null ? java.util.List.of() : ui.get("slashCommands");
+            mentionProviders = ui.get("mentionProviders") == null ? java.util.List.of() : ui.get("mentionProviders");
+            if (ui.get("settingsPage") instanceof Map<?, ?> page) {
+                hasSettingsPage = true;
+                settingsPageTitle = page.get("title");
+            }
+        }
+        data.put("slashCommands", slashCommands);
+        data.put("mentionProviders", mentionProviders);
+        data.put("hasSettingsPage", hasSettingsPage);
+        data.put("settingsPageTitle", settingsPageTitle);
+        return Response.success(data);
     }
 
     /** P2：目录扫描——可安装候选（含 installed 标记）。 */

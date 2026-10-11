@@ -370,15 +370,24 @@ public class HarnessConfiguration {
             com.jnf.harness.domain.plugin.PluginEndpointRegistry endpointRegistry,
             com.jnf.harness.spi.host.ShellService shellHostService,
             com.jnf.harness.spi.host.WebService webHostService,
-            com.jnf.harness.spi.host.SessionSearchService sessionSearchHostService) {
+            com.jnf.harness.spi.host.SessionSearchService sessionSearchHostService,
+            com.jnf.harness.spi.host.AgentRunService agentRunHostService) {
         // P1 宿主服务查询：插件经 lookupService 取得受治理的执行通道
         Map<Class<?>, Object> hostServices = Map.of(
                 com.jnf.harness.spi.host.ShellService.class, shellHostService,
                 com.jnf.harness.spi.host.WebService.class, webHostService,
-                com.jnf.harness.spi.host.SessionSearchService.class, sessionSearchHostService);
+                com.jnf.harness.spi.host.SessionSearchService.class, sessionSearchHostService,
+                com.jnf.harness.spi.host.AgentRunService.class, agentRunHostService);
         return new com.jnf.harness.domain.plugin.PluginHost(loader, toolRegistry,
                 promptAssembler, hookRegistry, eventBus, configStore, hostServices, toolCatalog,
                 endpointRegistry);
+    }
+
+    /** P8-3：子智能体宿主服务（深度 ≤2 防递归 + 超时收口），供子智能体插件 lookupService 取用。 */
+    @Bean
+    public com.jnf.harness.domain.agent.service.run.SubagentHostService agentRunHostService(
+            com.jnf.harness.domain.agent.service.run.AgentRunFactory agentRunFactory) {
+        return new com.jnf.harness.domain.agent.service.run.SubagentHostService(agentRunFactory);
     }
 
     @Bean

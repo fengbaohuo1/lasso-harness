@@ -140,6 +140,28 @@ public class PluginHost {
         return new ArrayList<>(active.keySet());
     }
 
+    /** 该插件当前注册的工具名（P8-2 贡献面可视化；未激活返回空表）。 */
+    public List<String> toolNamesOf(String pluginId) {
+        ActivePlugin plugin = active.get(pluginId);
+        return plugin == null ? List.of() : List.copyOf(plugin.context().registeredToolNames());
+    }
+
+    /** 该插件的制品定位（code source）：classpath 插件不落安装表，贡献面清单按此精确读取。 */
+    public java.util.Optional<Path> artifactOf(String pluginId) {
+        ActivePlugin plugin = active.get(pluginId);
+        if (plugin == null || plugin.plugin() == null) {
+            return java.util.Optional.empty();
+        }
+        try {
+            var location = plugin.plugin().getClass().getProtectionDomain().getCodeSource().getLocation();
+            return location == null
+                    ? java.util.Optional.empty()
+                    : java.util.Optional.of(Path.of(location.toURI()));
+        } catch (Exception e) {
+            return java.util.Optional.empty();
+        }
+    }
+
     public PluginLifecycleState stateOf(String pluginId) {
         if (active.containsKey(pluginId)) {
             return PluginLifecycleState.ACTIVE;

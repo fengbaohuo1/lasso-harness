@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "toolRenderers": {
+    "delegate_task": {
+      "title": "子智能体 · {args.task}",
+      "summary": "子会话 {result.sessionId}",
+      "blocks": [
+        { "type": "text", "label": "子任务", "source": "args.task" },
+        { "type": "kv", "label": "子会话", "source": "result" },
+        { "type": "text", "label": "汇报", "source": "result.text" }
+      ]
+    }
+  },
+  "slashCommands": [
+    {
+      "name": "delegate",
+      "description": "派发独立子任务给子智能体",
+      "argumentHint": "任务",
+      "template": "请把以下独立子任务派发给子智能体执行并汇总结果：{arg}",
+      "mode": "insert"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ package com.jnf.harness.domain.plugin;
 
 import com.jnf.harness.spi.host.PluginHttpHandler;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -39,6 +40,20 @@ public class PluginEndpointRegistry {
         String normalizedPath = normalizePath(path);
         return endpoints.keySet().stream()
                 .anyMatch(key -> key.pluginId().equals(pluginId) && key.path().equals(normalizedPath));
+    }
+
+    /** 端点项（P8-2 贡献面可视化）。 */
+    public record EndpointRoute(String method, String path) {
+    }
+
+    /** 该插件当前注册的端点清单（方法+路径，按路径/方法排序）。 */
+    public List<EndpointRoute> list(String pluginId) {
+        return endpoints.keySet().stream()
+                .filter(key -> key.pluginId().equals(pluginId))
+                .map(key -> new EndpointRoute(key.method(), key.path()))
+                .sorted(java.util.Comparator.comparing(EndpointRoute::path)
+                        .thenComparing(EndpointRoute::method))
+                .toList();
     }
 
     public int size() {

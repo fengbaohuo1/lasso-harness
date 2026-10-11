@@ -40,6 +40,22 @@ public class PersistingSessionLog {
         return delegate;
     }
 
+    /**
+     * 补写已入 delegate 但未落存储的条目（压缩事件写穿用：引擎直改 delegate，
+     * 不经 append()，需要调用方在压缩后补持久化，否则 Compacted 重启即丢）。
+     *
+     * @param fromSize 压缩前 delegate.entries().size()
+     */
+    public void flushNewEntries(int fromSize) {
+        if (store == null) {
+            return;
+        }
+        List<SessionEventEntry> entries = delegate.entries();
+        for (int i = Math.max(0, fromSize); i < entries.size(); i++) {
+            store.append(sessionId, entries.get(i));
+        }
+    }
+
     public String sessionId() {
         return sessionId;
     }

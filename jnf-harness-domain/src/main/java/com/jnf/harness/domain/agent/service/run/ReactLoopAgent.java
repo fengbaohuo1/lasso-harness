@@ -447,7 +447,13 @@ public class ReactLoopAgent {
 
     private void runCompactionIfHeavy() {
         long estimate = estimateTokens(session.log().deriveMessages());
-        compactionEngine.compactIfNeeded(session.log(), estimate, options().compactionThresholdTokens());
+        int before = session.log().entries().size();
+        boolean compacted = compactionEngine.compactIfNeeded(
+                session.log(), estimate, options().compactionThresholdTokens());
+        if (compacted) {
+            // 压缩产物（Compacted）直改 delegate，这里补写穿（否则重启即丢、审计断链）
+            session.flushNewEntries(before);
+        }
     }
 
     /** 运行选项（M4：turn/step 级解析，支撑渠道热切换）。 */

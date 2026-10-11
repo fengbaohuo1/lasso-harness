@@ -84,6 +84,13 @@ class ConsoleSessionManagementIntegrationTest {
         assertEquals(10L, usage.get("contextTokens"));
         assertEquals(1L, usage.get("compactions"));
 
+        // P8-1：强制压缩（/compact 指令）——Compacted 事件落盘，compactions 计数 +1
+        assertEquals("00000", controller.compact(sessionId).code());
+        assertEquals(Boolean.TRUE, controller.compact(sessionId).data().get("compacted"));
+        Map<String, Object> afterCompact = controller.usage(sessionId).data();
+        assertTrue((Long) afterCompact.get("compactions") >= 2L,
+                "强制压缩后 compactions 应增加，实际 " + afterCompact.get("compactions"));
+
         // 软删后列表过滤（事件文件保留，可回放）
         assertEquals("00000", controller.delete(sessionId).code());
         assertFalse(controller.sessions().data().stream().anyMatch(i -> sessionId.equals(i.get("sessionId"))));

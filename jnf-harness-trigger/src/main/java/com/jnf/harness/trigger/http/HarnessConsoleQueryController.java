@@ -40,16 +40,19 @@ public class HarnessConsoleQueryController {
 
     private final ISessionEventStore eventStore;
     private final SessionMetaService sessionMetaService;
+    private final com.jnf.harness.domain.agent.service.compaction.CompactionEngine compactionEngine;
     private final Path eventsRoot;
     private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
             new com.fasterxml.jackson.databind.ObjectMapper();
 
     public HarnessConsoleQueryController(ISessionEventStore eventStore,
                                          SessionMetaService sessionMetaService,
+                                         com.jnf.harness.domain.agent.service.compaction.CompactionEngine compactionEngine,
                                          @org.springframework.beans.factory.annotation.Value(
                                                  "${harness.events.dir:./data/events}") String eventsRoot) {
         this.eventStore = eventStore;
         this.sessionMetaService = sessionMetaService;
+        this.compactionEngine = compactionEngine;
         this.eventsRoot = Path.of(eventsRoot);
     }
 
@@ -107,6 +110,22 @@ public class HarnessConsoleQueryController {
     public Response<Map<String, Object>> delete(@PathVariable String sessionId) {
         SessionMeta meta = sessionMetaService.softDelete(sessionId);
         return Response.success(Map.of("sessionId", meta.sessionId(), "deleted", meta.deleted()));
+    }
+
+    /** P8-1：强制压缩会话（/compact 指令）——Compacted 事件落盘、历史保留可溯。 */
+    @org.springframework.web.bind.annotation.PostMapping("/sessions/{sessionId}/compact")
+    public Response<Map<String, Object>> compact(@PathVariable String sessionId) {
+        SessionLog log = new SessionLog();
+        log.appendBatch(eventStore.load(sessionId).stream().map(SessionEventEntry::event).toList());
+        var persisting = new com.jnf.harness.domain.session.event.PersistingSessionLog(
+                sessionId, log, eventStore);
+        // 强制触发：把估计值抬到阈值之上（引擎自身按消息事件量决定压缩范围）
+        int before = log.entries().size();
+        boolean compacted = compactionEngine.compactIfNeeded(persisting.log(), Long.MAX_VALUE / 4, 1);
+        if (compacted) {
+            persisting.flushNewEntries(before);
+        }
+        return Response.success(Map.of("sessionId", sessionId, "compacted", compacted));
     }
 
     /** 会话 token 用量（F6：由 Usage 事件聚合，事件里没有 usage 时全 0）。

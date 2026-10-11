@@ -108,6 +108,16 @@ class PluginUiAndEndpointIntegrationTest {
         assertEquals("00000", snippet.code());
         assertTrue(new ObjectMapper().writeValueAsString(snippet.data()).contains("周报"));
 
+        // P8-2 贡献面聚合：工具/端点/UI 声明一屏看全
+        Map<String, Object> contributions = pluginController.contributions("sample-tools").data();
+        assertEquals(2, ((java.util.List<?>) contributions.get("tools")).size(),
+                "sample 应注册 2 个工具");
+        assertEquals(4, ((java.util.List<?>) contributions.get("endpoints")).size(),
+                "sample 应注册 4 个端点（stats/test-connection/list-snippets/read-snippet）");
+        assertTrue(String.valueOf(contributions.get("slashCommands")).contains("weather"));
+        assertTrue(String.valueOf(contributions.get("mentionProviders")).contains("snippets"));
+        assertEquals(Boolean.TRUE, contributions.get("hasSettingsPage"));
+
         // 卸载：端点随事务边界回收（classpath 官方插件的端点仍在，只验 sample 已回收）
         registry.uninstall("sample-tools");
         Response<Object> gone = pluginApiController.invoke("sample-tools",
