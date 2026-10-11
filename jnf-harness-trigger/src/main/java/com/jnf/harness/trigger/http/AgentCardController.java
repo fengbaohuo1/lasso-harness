@@ -12,6 +12,7 @@ import java.util.Map;
  * Agent Card 发现面（/.well-known）：DSH v1 私有卡 + A2A 0.3.0 标准卡 + 旧版兼容路径。
  */
 @RestController
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.a2a", havingValue = "true", matchIfMissing = true)
 public class AgentCardController {
 
     private final String displayName;

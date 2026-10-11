@@ -1,4 +1,4 @@
-package com.jnf.harness.domain.lsp;
+package com.jnf.harness.plugin.essentials;
 
 import com.jnf.harness.model.AbstractTool;
 import com.jnf.harness.model.ToolExecutionResult;

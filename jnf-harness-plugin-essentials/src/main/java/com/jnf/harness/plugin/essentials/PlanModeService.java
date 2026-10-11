@@ -1,4 +1,4 @@
-package com.jnf.harness.domain.plan;
+package com.jnf.harness.plugin.essentials;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

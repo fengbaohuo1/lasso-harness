@@ -55,5 +55,10 @@
       <artifactId>jnf-harness-plugin-web</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-essentials</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 </project>

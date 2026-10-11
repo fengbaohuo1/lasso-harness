@@ -19,6 +19,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/digital-humans")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.digital-human", havingValue = "true", matchIfMissing = true)
 public class DigitalHumanController {
 
     private final DigitalHumanService service;

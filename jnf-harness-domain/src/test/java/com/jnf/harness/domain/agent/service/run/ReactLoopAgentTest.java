@@ -80,8 +80,8 @@ class ReactLoopAgentTest {
         PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
         SystemPromptAssembler assembler = new SystemPromptAssembler();
         assembler.registerSection(new SystemPromptAssembler.PromptSection("base", 0, "你是测试智能体。"));
-        return new ReactLoopAgent("agent-1", session, llm, hint -> options, runner,
-                () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
+        return new ReactLoopAgent("agent-1", session, llm, (hint, profile) -> options, runner,
+                profile -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
                 assembler,
                 new BasicCompactionEngine(events -> "早期历史摘要"), null);
     }
@@ -128,9 +128,9 @@ class ReactLoopAgentTest {
         AgentOptions[] current = {new AgentOptions("model-1", LlmChannel.openai("http://one:1", "k1"),
                 50, 4, 128_000, 6, 100_000L, null, null)};
         PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
-        ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm, hint -> current[0],
+        ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm, (hint, profile) -> current[0],
                 call -> CompletableFuture.completedFuture(ToolExecutionResult.ok("unused")),
-                () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
+                profile -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
                 new SystemPromptAssembler(),
                 new BasicCompactionEngine(events -> "摘要"), null);
 
@@ -155,10 +155,10 @@ class ReactLoopAgentTest {
         llm.scripts.add(text("答二", FinishReason.STOP));
         PersistingSessionLog session = new PersistingSessionLog("s", new SessionLog(), null);
         ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm,
-                hint -> new AgentOptions(hint == null || hint.isBlank() ? "default-model" : hint,
+                (hint, profile) -> new AgentOptions(hint == null || hint.isBlank() ? "default-model" : hint,
                         LlmChannel.openai("http://x:1", "k"), 50, 4, 128_000, 6, 100_000L, null, null),
                 call -> CompletableFuture.completedFuture(ToolExecutionResult.ok("unused")),
-                () -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
+                profile -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
                 new SystemPromptAssembler(),
                 new BasicCompactionEngine(events -> "摘要"), null);
 

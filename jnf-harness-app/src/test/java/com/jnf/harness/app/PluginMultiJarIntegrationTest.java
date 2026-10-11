@@ -67,10 +67,13 @@ class PluginMultiJarIntegrationTest {
         assertEquals(PluginLifecycleState.ACTIVE, pluginHost.stateOf("builtin-fs"));
         assertEquals(PluginLifecycleState.ACTIVE, pluginHost.stateOf("builtin-shell"));
         assertEquals(PluginLifecycleState.ACTIVE, pluginHost.stateOf("builtin-web"));
+        assertEquals(PluginLifecycleState.ACTIVE, pluginHost.stateOf("essentials"));
         // toolNamespace=global：工具身份不随承载形态变化
         assertTrue(toolRegistry.lookup("fs_read").isPresent());
         assertTrue(toolRegistry.lookup("shell_execute").isPresent());
         assertTrue(toolRegistry.lookup("web_fetch").isPresent());
+        assertTrue(toolRegistry.lookup("todo_write").isPresent(), "A3 essentials 插件提供 todo_write");
+        assertTrue(toolRegistry.lookup("session_search").isPresent(), "A3 essentials 插件提供 session_search");
     }
 
     @Test

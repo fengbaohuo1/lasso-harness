@@ -55,10 +55,11 @@ public class ReactLoopAgent {
     private final String agentId;
     private final PersistingSessionLog session;
     private final ILlmRuntimePort llm;
-    /** 选项解析（F2）：入参为本 turn 的模型提示（可空）——空=生效渠道；非空=按提示解析渠道/模型。 */
-    private final java.util.function.Function<String, AgentOptions> optionsRef;
+    /** 选项解析（F2/A1）：入参为本 turn 的模型提示与画像提示（均可空）。 */
+    private final java.util.function.BiFunction<String, String, AgentOptions> optionsRef;
     private final ToolRunner toolRunner;
-    private final Supplier<List<Map<String, Object>>> toolSchemas;
+    /** 工具 schema 供应商：按画像工具码现算（R5 画像白名单——token 开销按场景裁）。 */
+    private final java.util.function.Function<String, List<Map<String, Object>>> toolSchemas;
     private final SystemPromptAssembler promptAssembler;
     private final CompactionEngine compactionEngine;
     private final AgentEventListener listener;
@@ -73,10 +74,12 @@ public class ReactLoopAgent {
     private final AtomicReference<CompletableFuture<Void>> currentGeneration = new AtomicReference<>();
     private volatile Phase phase = new Phase.Idle();
     private volatile String turnModelHint;
+    private volatile String turnProfileHint;
 
     public ReactLoopAgent(String agentId, PersistingSessionLog session, ILlmRuntimePort llm,
-                          java.util.function.Function<String, AgentOptions> optionsRef, ToolRunner toolRunner,
-                          Supplier<List<Map<String, Object>>> toolSchemas,
+                          java.util.function.BiFunction<String, String, AgentOptions> optionsRef,
+                          ToolRunner toolRunner,
+                          java.util.function.Function<String, List<Map<String, Object>>> toolSchemas,
                           SystemPromptAssembler promptAssembler,
                           CompactionEngine compactionEngine, AgentEventListener listener) {
         this.agentId = agentId;
@@ -107,15 +110,21 @@ public class ReactLoopAgent {
         return ask(text, null, listener);
     }
 
-    /** 提交一条用户消息（F2：可带 per-message 模型提示）。 */
-    public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, AgentEventListener listener) {
+    /** 提交一条用户消息（F2/A1：可带 per-message 模型/画像提示）。 */
+    public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, String profileHint,
+                                                    AgentEventListener listener) {
         Inbox.PendingMessage message =
-                new Inbox.PendingMessage(text, modelHint, new CompletableFuture<>(), listener);
+                new Inbox.PendingMessage(text, modelHint, profileHint, new CompletableFuture<>(), listener);
         inbox.add(message);
         if (started.compareAndSet(false, true)) {
             driver.submit(this::driverLoop);
         }
         return message.future();
+    }
+
+    /** 兼容旧调用面（无画像提示）。 */
+    public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, AgentEventListener listener) {
+        return ask(text, modelHint, null, listener);
     }
 
     /** 协作式取消当前 turn。 */
@@ -180,6 +189,11 @@ public class ReactLoopAgent {
         // F2：本 turn 模型提示（取首个非空；选项解析器按提示解析渠道/模型）
         turnModelHint = claimed.stream()
                 .map(Inbox.PendingMessage::modelHint)
+                .filter(hint -> hint != null && !hint.isBlank())
+                .findFirst().orElse(null);
+        // A1：本 turn 画像提示（取首个非空；旋钮/工具画像/提示词补丁按画像裁）
+        turnProfileHint = claimed.stream()
+                .map(Inbox.PendingMessage::profileHint)
                 .filter(hint -> hint != null && !hint.isBlank())
                 .findFirst().orElse(null);
         // 事件分发：默认监听 + 本 turn 首个消息的专属监听
@@ -354,7 +368,7 @@ public class ReactLoopAgent {
                 .channel(options.channel())
                 .model(options.model())
                 .messages(messages)
-                .toolSchemas(toolSchemas.get())
+                .toolSchemas(toolSchemas.apply(options.toolProfile()))
                 .maxTokens(options.maxTokens())
                 .temperature(options.temperature())
                 .build();
@@ -410,6 +424,11 @@ public class ReactLoopAgent {
     private List<Message> buildMessages() {
         List<Message> derived = session.log().deriveMessages();
         String systemPrompt = promptAssembler.assemble();
+        // A1：画像提示词补丁（场景指令按画像注入）
+        String promptExtra = options().promptExtra();
+        if (promptExtra != null && !promptExtra.isBlank()) {
+            systemPrompt = systemPrompt + "\n\n" + promptExtra;
+        }
         List<Message> messages = new ArrayList<>(derived.size() + 1);
         if (!systemPrompt.isBlank()) {
             messages.add(Message.ofText(MessageSource.SYSTEM, systemPrompt));
@@ -433,7 +452,7 @@ public class ReactLoopAgent {
 
     /** 运行选项（M4：turn/step 级解析，支撑渠道热切换）。 */
     private AgentOptions options() {
-        return optionsRef.apply(turnModelHint);
+        return optionsRef.apply(turnModelHint, turnProfileHint);
     }
 
     private long estimateTokens(List<Message> messages) {

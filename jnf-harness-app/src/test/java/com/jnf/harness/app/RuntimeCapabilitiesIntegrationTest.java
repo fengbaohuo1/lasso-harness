@@ -2,7 +2,6 @@ package com.jnf.harness.app;
 
 import com.jnf.harness.domain.goal.GoalService;
 import com.jnf.harness.domain.jobs.JobRegistryService;
-import com.jnf.harness.domain.plan.PlanModeService;
 import com.jnf.harness.domain.schedule.ScheduleService;
 import com.jnf.harness.domain.tool.service.ToolRegistry;
 import com.jnf.harness.model.ToolExecutionResult;
@@ -34,8 +33,6 @@ class RuntimeCapabilitiesIntegrationTest {
     @Autowired
     GoalService goalService;
 
-    @Autowired
-    PlanModeService planModeService;
 
     @Autowired
     ToolRegistry toolRegistry;
@@ -102,6 +99,6 @@ class RuntimeCapabilitiesIntegrationTest {
         ToolExecutionResult plan = toolRegistry.lookup("exit_plan_mode").orElseThrow()
                 .execute(Map.of("plan", "分节施工"), ctx).get();
         assertTrue(plan.success());
-        assertFalse(planModeService.get("rt-session").planMode());
+        // plan 态属插件内部（A3 外移）：工具成功即契约
     }
 }

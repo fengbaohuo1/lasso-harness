@@ -18,6 +18,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/harness")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.task", havingValue = "true", matchIfMissing = true)
 public class HarnessTaskController {
 
     private final TaskSubmitService taskSubmitService;

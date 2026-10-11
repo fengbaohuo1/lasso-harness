@@ -21,8 +21,6 @@ import com.jnf.harness.domain.tool.shell.ShellCommandGuard;
 import com.jnf.harness.domain.tool.shell.ShellCommandPolicy;
 import com.jnf.harness.domain.tool.shell.IShellExecutor;
 import com.jnf.harness.domain.tool.web.IWebPort;
-import com.jnf.harness.domain.todo.TodoService;
-import com.jnf.harness.domain.todo.TodoWriteTool;
 import com.jnf.harness.infrastructure.adapter.eventstore.JsonlSessionEventStore;
 import com.jnf.harness.infrastructure.adapter.llm.AnthropicAdapter;
 import com.jnf.harness.infrastructure.adapter.llm.LlmRuntimeGateway;
@@ -70,35 +68,64 @@ public class HarnessConfiguration {
         return new com.jnf.harness.domain.agent.service.ask.UserQuestionGateway.InMemoryUserQuestionGateway();
     }
 
-    @Bean
-    public TodoService todoService() {
-        return new TodoService();
+
+    /** R5/A1：按画像工具码现算工具 schema（可测缝：画像白名单裁 token 开销）。 */
+    public static List<Map<String, Object>> buildSchemas(
+            com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
+            ToolRegistry toolRegistry, String toolProfile) {
+        java.util.Set<String> enabled = toolCatalogPort.findEnabled(
+                toolProfile == null || toolProfile.isBlank()
+                        ? com.jnf.harness.domain.agent.model.AgentOptions.DEFAULT_TOOL_PROFILE : toolProfile)
+                .stream()
+                .map(com.jnf.harness.domain.runtime.tool.IToolCatalogPort.ToolCatalogEntry::toolCode)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Map<String, Object>> schemas = new ArrayList<>();
+        for (ToolDefinition tool : toolRegistry.list()) {
+            if (!enabled.isEmpty() && !enabled.contains(tool.name())) {
+                continue;
+            }
+            Map<String, Object> schema = new LinkedHashMap<>();
+            schema.put("name", tool.name());
+            schema.put("description", tool.description());
+            schema.put("parameters", tool.parameters());
+            schemas.add(schema);
+        }
+        return schemas;
+    }
+    /** A2 能力开关：harness.capabilities.<x>，默认全开；关闭=工具不注册（服务/REST 同步条件化）。 */
+    static boolean capability(org.springframework.core.env.Environment env, String name) {
+        return env.getProperty("harness.capabilities." + name, Boolean.class, true);
     }
 
     @Bean
-    public ToolRegistry toolRegistry(UserQuestionGateway userQuestionGateway, TodoService todoService,
+    public ToolRegistry toolRegistry(UserQuestionGateway userQuestionGateway,
                                      com.jnf.harness.domain.goal.GoalService goalService,
                                      com.jnf.harness.domain.jobs.JobRegistryService jobService,
                                      com.jnf.harness.domain.schedule.ScheduleService scheduleService,
-                                     com.jnf.harness.domain.plan.PlanModeService planModeService,
                                      com.jnf.harness.domain.terminal.TerminalService terminalService,
                                      com.jnf.harness.domain.extension.ExtensionManagementService extensionService,
-                                     ISessionEventStore sessionEventStore) {
-        // P2：内核零内置工具——fs/shell/web 族由官方插件 JAR（jnf-harness-plugin-*）
-        // 经 plugins/ 目录或 classpath 发现激活注册；这里只留依赖领域服务的内核工具
+                                     org.springframework.core.env.Environment env) {
+        // P2/A3：内核零内置工具——fs/shell/web 族官方插件 JAR；essentials 族（todo/plan/lsp/session_search）
+        // 亦为插件；这里只留依赖领域服务的内核工具（A2 开关裁注册）
         InMemoryToolRegistry registry = new InMemoryToolRegistry();
         registry.register(new AskUserTool(userQuestionGateway, 300));
-        registry.register(new TodoWriteTool(todoService));
         // 第 12 节：jobs / goal / schedule / plan 工具族
-        com.jnf.harness.domain.jobs.JobTools.all(jobService).forEach(registry::register);
-        registry.register(new com.jnf.harness.domain.goal.GoalTool(goalService));
-        com.jnf.harness.domain.schedule.ScheduleTools.all(scheduleService).forEach(registry::register);
-        registry.register(new com.jnf.harness.domain.plan.ExitPlanModeTool(planModeService));
+        if (capability(env, "jobs")) {
+            com.jnf.harness.domain.jobs.JobTools.all(jobService).forEach(registry::register);
+        }
+        if (capability(env, "goal")) {
+            registry.register(new com.jnf.harness.domain.goal.GoalTool(goalService));
+        }
+        if (capability(env, "schedule")) {
+            com.jnf.harness.domain.schedule.ScheduleTools.all(scheduleService).forEach(registry::register);
+        }
         // 第 12b：terminal / extension / session_search / lsp 工具族
-        com.jnf.harness.domain.terminal.TerminalTools.all(terminalService).forEach(registry::register);
-        com.jnf.harness.domain.extension.ExtensionTools.all(extensionService).forEach(registry::register);
-        registry.register(new com.jnf.harness.domain.session.SessionSearchTool(sessionEventStore));
-        registry.register(new com.jnf.harness.domain.lsp.LspTool());
+        if (capability(env, "terminal")) {
+            com.jnf.harness.domain.terminal.TerminalTools.all(terminalService).forEach(registry::register);
+        }
+        if (capability(env, "extension")) {
+            com.jnf.harness.domain.extension.ExtensionTools.all(extensionService).forEach(registry::register);
+        }
         return registry;
     }
 
@@ -115,6 +142,12 @@ public class HarnessConfiguration {
     @Bean
     public com.jnf.harness.domain.tool.shell.ShellCommandPolicy shellCommandPolicy() {
         return com.jnf.harness.domain.tool.shell.ShellCommandPolicy.defaultPolicy();
+    }
+
+    /** 宿主服务（A3）：跨会话历史检索，供 session_search 工具插件查询。 */
+    @Bean
+    public com.jnf.harness.spi.host.SessionSearchService sessionSearchHostService(ISessionEventStore eventStore) {
+        return new com.jnf.harness.domain.session.SessionSearchHostService(eventStore);
     }
 
     /** 宿主服务（P1）：Web 出网通道，供 web 工具插件查询。 */
@@ -144,24 +177,28 @@ public class HarnessConfiguration {
 
     // ---------------- 第 13 节：开放协议与数字人 ----------------
 
-    @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.a2a", havingValue = "true", matchIfMissing = true)
+@Bean
     public com.jnf.harness.domain.acp.A2aTaskService a2aTaskService() {
         return new com.jnf.harness.domain.acp.A2aTaskService();
     }
 
-    @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.digital-human", havingValue = "true", matchIfMissing = true)
+@Bean
     public com.jnf.harness.domain.digitalhuman.DigitalHumanService digitalHumanService(
             org.springframework.jdbc.core.JdbcTemplate jdbc) {
         return new com.jnf.harness.domain.digitalhuman.DigitalHumanService(
                 new com.jnf.harness.infrastructure.adapter.setting.DigitalHumanRepository(jdbc));
     }
 
-    @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.digital-human", havingValue = "true", matchIfMissing = true)
+@Bean
     public com.jnf.harness.infrastructure.adapter.web.RemoteAgentDiscoveryService remoteAgentDiscoveryService() {
         return new com.jnf.harness.infrastructure.adapter.web.RemoteAgentDiscoveryService();
     }
 
-    @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.collaboration", havingValue = "true", matchIfMissing = true)
+@Bean
     public com.jnf.harness.domain.collaboration.CollaborationService collaborationService(
             org.springframework.jdbc.core.JdbcTemplate jdbc) {
         return new com.jnf.harness.domain.collaboration.CollaborationService(
@@ -191,10 +228,6 @@ public class HarnessConfiguration {
                 new com.jnf.harness.infrastructure.adapter.setting.RuntimeStateRepositories.ScheduleRepository(jdbc));
     }
 
-    @Bean
-    public com.jnf.harness.domain.plan.PlanModeService planModeService() {
-        return new com.jnf.harness.domain.plan.PlanModeService();
-    }
 
     @Bean
     public com.jnf.harness.domain.tool.service.ToolHookRegistry toolHookRegistry() {
@@ -256,20 +289,23 @@ public class HarnessConfiguration {
 
     // ---------------- 第 10 节收尾：任务五子域 ----------------
 
-    @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.task", havingValue = "true", matchIfMissing = true)
+@Bean
     public com.jnf.harness.domain.task.IHarnessTaskQueueRepository harnessTaskQueueRepository(
             com.jnf.harness.infrastructure.dao.HarnessTaskDao dao) {
         return new com.jnf.harness.infrastructure.adapter.setting.HarnessTaskRepository(dao);
     }
 
-    @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.task", havingValue = "true", matchIfMissing = true)
+@Bean
     public com.jnf.harness.domain.task.HarnessExecutionService harnessExecutionService(
             com.jnf.harness.domain.task.IHarnessTaskQueueRepository queue,
             AgentRunFactory agentRunFactory) {
         return new com.jnf.harness.domain.task.HarnessExecutionService(queue, agentRunFactory);
     }
 
-    @Bean
+        @org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.task", havingValue = "true", matchIfMissing = true)
+@Bean
     public com.jnf.harness.domain.task.TaskSubmitService taskSubmitService(
             com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
             com.jnf.harness.domain.task.IHarnessTaskQueueRepository queue,
@@ -333,11 +369,13 @@ public class HarnessConfiguration {
             com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalog,
             com.jnf.harness.domain.plugin.PluginEndpointRegistry endpointRegistry,
             com.jnf.harness.spi.host.ShellService shellHostService,
-            com.jnf.harness.spi.host.WebService webHostService) {
+            com.jnf.harness.spi.host.WebService webHostService,
+            com.jnf.harness.spi.host.SessionSearchService sessionSearchHostService) {
         // P1 宿主服务查询：插件经 lookupService 取得受治理的执行通道
         Map<Class<?>, Object> hostServices = Map.of(
                 com.jnf.harness.spi.host.ShellService.class, shellHostService,
-                com.jnf.harness.spi.host.WebService.class, webHostService);
+                com.jnf.harness.spi.host.WebService.class, webHostService,
+                com.jnf.harness.spi.host.SessionSearchService.class, sessionSearchHostService);
         return new com.jnf.harness.domain.plugin.PluginHost(loader, toolRegistry,
                 promptAssembler, hookRegistry, eventBus, configStore, hostServices, toolCatalog,
                 endpointRegistry);
@@ -475,65 +513,81 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.agent.profile.IAgentProfileRepository agentProfileRepository(
+            com.jnf.harness.infrastructure.dao.AgentProfileDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.setting.AgentProfileRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.agent.profile.AgentProfileService agentProfileService(
+            com.jnf.harness.domain.agent.profile.IAgentProfileRepository repository) {
+        // A1：智能体画像（步数/预算/工具画像/提示词补丁按场景裁）
+        return new com.jnf.harness.domain.agent.profile.AgentProfileService(repository);
+    }
+
+    @Bean
     public AgentRunFactory agentRunFactory(ILlmRuntimePort llmRuntimePort, ToolRunner toolRunner,
                                            ToolRegistry toolRegistry, ISessionEventStore store,
                                            SystemPromptAssembler promptAssembler,
                                            CompactionEngine compactionEngine,
                                            com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
                                            com.jnf.harness.domain.runtime.setting.ModelSettingService modelSettingService,
+                                           com.jnf.harness.domain.agent.profile.AgentProfileService profileService,
                                            @Value("${harness.llm.default.base-url}") String baseUrl,
                                            @Value("${harness.llm.default.api-key}") String apiKey,
                                            @Value("${harness.llm.default.model}") String model) {
-        // R5：工具目录真接线——只暴露 default 画像启用的工具。
+        // R5：工具目录真接线——只暴露画像启用的工具（toolProfile 来自画像，SD2）。
         // P3 修复：schema 每次现算（插件激活在 ApplicationRunner，晚于 Bean 构建；
         // 冻结快照会让插件工具永远不进模型工具表）
-        java.util.function.Supplier<List<Map<String, Object>>> schemasSupplier = () -> {
-            java.util.Set<String> enabled = toolCatalogPort.findEnabled("default").stream()
-                    .map(com.jnf.harness.domain.runtime.tool.IToolCatalogPort.ToolCatalogEntry::toolCode)
-                    .collect(java.util.stream.Collectors.toSet());
-            List<Map<String, Object>> schemas = new ArrayList<>();
-            for (ToolDefinition tool : toolRegistry.list()) {
-                if (!enabled.isEmpty() && !enabled.contains(tool.name())) {
-                    continue;
-                }
-                Map<String, Object> schema = new LinkedHashMap<>();
-                schema.put("name", tool.name());
-                schema.put("description", tool.description());
-                schema.put("parameters", tool.parameters());
-                schemas.add(schema);
-            }
-            return schemas;
-        };
-        // F2：模型解析——per-message 模型提示优先（命中 modelCode 的渠道整渠道切换；
-        // 未命中作模型名覆盖在生效渠道上）；空提示=生效渠道，文件配置兜底
-        java.util.function.Function<String, AgentOptions> optionsResolver = hint -> {
+        java.util.function.Function<String, List<Map<String, Object>>> schemasSupplier =
+                toolProfile -> buildSchemas(toolCatalogPort, toolRegistry, toolProfile);
+        // F2/A1：模型 + 画像解析——per-message 模型提示优先（命中 modelCode 的渠道整渠道切换；
+        // 未命中作模型名覆盖在生效渠道上）；画像旋钮/工具画像/提示词补丁按 profile 提示裁
+        java.util.function.BiFunction<String, String, AgentOptions> optionsResolver = (hint, profileHint) -> {
+            com.jnf.harness.domain.agent.profile.AgentProfile profile = profileService.resolve(profileHint);
+            String modelCode;
+            LlmChannel channel;
             if (hint != null && !hint.isBlank()) {
                 var byModel = modelSettingService.list().stream()
                         .filter(m -> hint.equals(m.modelCode()))
                         .findFirst();
                 if (byModel.isPresent()) {
                     var setting = byModel.get();
-                    return AgentOptions.of(setting.modelCode(), new LlmChannel(setting.baseUrl(),
+                    modelCode = setting.modelCode();
+                    channel = new LlmChannel(setting.baseUrl(),
                             modelSettingService.secrets().resolve(setting.apiKeyRef()),
-                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol())));
+                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol()));
+                } else {
+                    var active = modelSettingService.active();
+                    if (active.isPresent()) {
+                        var setting = active.get();
+                        modelCode = hint;
+                        channel = new LlmChannel(setting.baseUrl(),
+                                modelSettingService.secrets().resolve(setting.apiKeyRef()),
+                                com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol()));
+                    } else {
+                        modelCode = hint;
+                        channel = LlmChannel.openai(baseUrl, apiKey);
+                    }
                 }
+            } else {
                 var active = modelSettingService.active();
                 if (active.isPresent()) {
                     var setting = active.get();
-                    return AgentOptions.of(hint, new LlmChannel(setting.baseUrl(),
+                    modelCode = setting.modelCode();
+                    channel = new LlmChannel(setting.baseUrl(),
                             modelSettingService.secrets().resolve(setting.apiKeyRef()),
-                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol())));
+                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol()));
+                } else {
+                    modelCode = model;
+                    channel = LlmChannel.openai(baseUrl, apiKey);
                 }
-                return AgentOptions.of(hint, LlmChannel.openai(baseUrl, apiKey));
             }
-            var active = modelSettingService.active();
-            if (active.isPresent()) {
-                var setting = active.get();
-                return AgentOptions.of(setting.modelCode(), new LlmChannel(setting.baseUrl(),
-                        modelSettingService.secrets().resolve(setting.apiKeyRef()),
-                        com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol())));
-            }
-            return AgentOptions.of(model, LlmChannel.openai(baseUrl, apiKey));
+            return new AgentOptions(modelCode, channel,
+                    profile.maxStepsPerTurn(), profile.maxTokenContinuations(),
+                    profile.contextTokenBudget(), profile.keepRecentMessages(),
+                    profile.compactionThresholdTokens(), profile.maxTokens(), profile.temperature(),
+                    profile.toolProfile(), profile.promptExtra());
         };
         return new AgentRunFactory(llmRuntimePort, toolRunner, optionsResolver,
                 schemasSupplier, store, promptAssembler, compactionEngine);

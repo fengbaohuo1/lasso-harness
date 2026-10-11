@@ -63,6 +63,11 @@
       <artifactId>jnf-harness-plugin-web</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-plugin-essentials</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -80,7 +85,7 @@
               <goal>copy-dependencies</goal>
             </goals>
             <configuration>
-              <includeArtifactIds>jnf-harness-plugin-fs,jnf-harness-plugin-shell,jnf-harness-plugin-web</includeArtifactIds>
+              <includeArtifactIds>jnf-harness-plugin-fs,jnf-harness-plugin-shell,jnf-harness-plugin-web,jnf-harness-plugin-essentials</includeArtifactIds>
               <excludeTransitive>true</excludeTransitive>
               <outputDirectory>${project.build.directory}/plugins</outputDirectory>
             </configuration>

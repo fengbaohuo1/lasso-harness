@@ -16,6 +16,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/harness/goals")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.goal", havingValue = "true", matchIfMissing = true)
 public class HarnessGoalController {
 
     private final GoalService goalService;

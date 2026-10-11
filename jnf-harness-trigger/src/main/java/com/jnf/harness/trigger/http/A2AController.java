@@ -21,6 +21,7 @@ import java.util.Map;
  * <p>message/stream 暂未实现（-32601，挂账）；任务态进程内存（重启即失，与参照取舍一致）。
  */
 @RestController
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.a2a", havingValue = "true", matchIfMissing = true)
 public class A2AController {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

@@ -18,6 +18,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/collaboration")
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "harness.capabilities.collaboration", havingValue = "true", matchIfMissing = true)
 public class CollaborationController {
 
     private final CollaborationService service;

@@ -28,6 +28,7 @@
     <module>jnf-harness-plugin-fs</module>
     <module>jnf-harness-plugin-shell</module>
     <module>jnf-harness-plugin-web</module>
+    <module>jnf-harness-plugin-essentials</module>
     <module>jnf-harness-app</module>
   </modules>
 
@@ -96,6 +97,11 @@
       <dependency>
         <groupId>com.jnf.harness</groupId>
         <artifactId>jnf-harness-plugin-web</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.jnf.harness</groupId>
+        <artifactId>jnf-harness-plugin-essentials</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

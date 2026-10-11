@@ -52,8 +52,8 @@ class AgentToolIntegrationTest {
 
         PersistingSessionLog session = new PersistingSessionLog("s-1", new SessionLog(), null);
         ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm,
-                hint -> AgentOptions.of("m", LlmChannel.openai("http://127.0.0.1:1", "k")),
-                executor, () -> List.of(Map.of("name", "fs_write", "description", "写文件",
+                (hint, profile) -> AgentOptions.of("m", LlmChannel.openai("http://127.0.0.1:1", "k")),
+                executor, profile -> List.of(Map.of("name", "fs_write", "description", "写文件",
                         "parameters", Map.of("type", "object"))),
                 new SystemPromptAssembler(), new BasicCompactionEngine(events -> "摘要"), null);
 

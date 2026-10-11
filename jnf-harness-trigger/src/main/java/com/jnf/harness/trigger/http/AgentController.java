@@ -62,7 +62,8 @@ public class AgentController {
                 str(body, "model"),
                 body.get("maxTokens") == null ? null : Integer.valueOf(String.valueOf(body.get("maxTokens"))),
                 body.get("temperature") == null ? null : Double.valueOf(String.valueOf(body.get("temperature"))),
-                str(body, "cwd"));
+                str(body, "cwd"),
+                str(body, "profile"));
     }
 
     private String str(Map<String, Object> body, String key) {

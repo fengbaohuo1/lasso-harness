@@ -24,17 +24,18 @@ public class AgentRunFactory {
 
     private final ILlmRuntimePort llm;
     private final ToolRunner toolRunner;
-    /** 选项解析（F2）：入参为 per-message 模型提示（可空）。 */
-    private final java.util.function.Function<String, AgentOptions> optionsResolver;
-    private final Supplier<List<Map<String, Object>>> toolSchemas;
+    /** 选项解析（F2/A1）：入参为 per-message 模型提示与画像提示（均可空）。 */
+    private final java.util.function.BiFunction<String, String, AgentOptions> optionsResolver;
+    /** 工具 schema 供应商：按画像工具码现算（R5）。 */
+    private final java.util.function.Function<String, List<Map<String, Object>>> toolSchemas;
     private final ISessionEventStore store;
     private final SystemPromptAssembler promptAssembler;
     private final CompactionEngine compactionEngine;
     private final Map<String, ReactLoopAgent> agents = new ConcurrentHashMap<>();
 
     public AgentRunFactory(ILlmRuntimePort llm, ToolRunner toolRunner,
-                           java.util.function.Function<String, AgentOptions> optionsResolver,
-                           Supplier<List<Map<String, Object>>> toolSchemas,
+                           java.util.function.BiFunction<String, String, AgentOptions> optionsResolver,
+                           java.util.function.Function<String, List<Map<String, Object>>> toolSchemas,
                            ISessionEventStore store,
                            SystemPromptAssembler promptAssembler,
                            CompactionEngine compactionEngine) {
@@ -47,15 +48,15 @@ public class AgentRunFactory {
         this.compactionEngine = compactionEngine;
     }
 
-    /** 兼容旧构造面：无 per-message 模型提示语义的选项供应。 */
+    /** 兼容旧构造面：无 per-message 模型/画像提示语义的选项与 schema 供应。 */
     public AgentRunFactory(ILlmRuntimePort llm, ToolRunner toolRunner,
                            Supplier<AgentOptions> optionsSupplier,
-                           Supplier<List<Map<String, Object>>> toolSchemas,
+                           Supplier<List<Map<String, Object>>> schemasSupplier,
                            ISessionEventStore store,
                            SystemPromptAssembler promptAssembler,
                            CompactionEngine compactionEngine) {
-        this(llm, toolRunner, hint -> optionsSupplier.get(), toolSchemas, store,
-                promptAssembler, compactionEngine);
+        this(llm, toolRunner, (modelHint, profileHint) -> optionsSupplier.get(),
+                toolProfile -> schemasSupplier.get(), store, promptAssembler, compactionEngine);
     }
 
     public ReactLoopAgent getOrCreate(String agentId, AgentEventListener defaultListener) {

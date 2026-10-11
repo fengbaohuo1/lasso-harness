@@ -1,4 +1,4 @@
-package com.jnf.harness.domain.todo;
+package com.jnf.harness.plugin.essentials;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -173,6 +173,22 @@ CREATE TABLE IF NOT EXISTS room_event (
 );
 CREATE INDEX IF NOT EXISTS idx_room_event_room_seq ON room_event (room_id, seq);
 
+-- 智能体画像（A1：步数/预算/工具画像/提示词补丁按场景裁运行开销；default 画像可虚拟存在）
+CREATE TABLE IF NOT EXISTS harness_agent_profile (
+    profile_code               VARCHAR(64)  PRIMARY KEY,
+    display_name               VARCHAR(128),
+    max_steps_per_turn         INT,
+    max_token_continuations    INT,
+    context_token_budget       BIGINT,
+    keep_recent_messages       INT,
+    compaction_threshold_tokens BIGINT,
+    max_tokens                 INT,
+    temperature                DOUBLE,
+    tool_profile               VARCHAR(64)  DEFAULT 'default',
+    prompt_extra               TEXT
+);
+
+
 -- 工具目录种子（11 个内置工具；幂等）
 INSERT INTO harness_tool_catalog (tool_code, display_name, description, category, requires_approval)
 SELECT 'fs_read', '读取文件', '读取文件内容', 'fs', FALSE FROM DUAL
