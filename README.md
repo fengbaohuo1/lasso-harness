@@ -34,7 +34,8 @@ docker build -t jnf-harness .                         # 容器镜像
 | jnf-harness-plugin-fs | **官方插件 jar**：fs_read/fs_write/fs_search/fs_grep/fs_read_image/str_replace_editor |
 | jnf-harness-plugin-shell | **官方插件 jar**：shell_execute（执行通道经宿主 ShellService，命令守卫内建） |
 | jnf-harness-plugin-web | **官方插件 jar**：web_fetch/web_search（出网经宿主 WebService） |
-| jnf-harness-sample-plugin | 示例插件 JAR（五注册口演示，第三方插件样板） |
+| jnf-harness-plugin-essentials | **官方插件 jar**：todo_write/exit_plan_mode/lsp_query/session_search（内核瘦身外移） |
+| jnf-harness-sample-plugin | 示例插件 JAR（前后端全栈模板：五注册口 + UI 清单 + 插件端点） |
 | jnf-harness-app | Spring Boot 启动器 + Web 控制台 + schema + 组合根 |
 
 ## 能力面
@@ -51,6 +52,7 @@ docker build -t jnf-harness .                         # 容器镜像
 - **治理**：运行期审批（挂起-裁决，审批历史落表）、沙箱三档、命令守卫、任务五子域状态机（防绕过）
 - **会话**：事件溯源（sealed 事件 + WAL + 投影 + 压缩 + 回放/对账）
 - **模型**：渠道管理（CRUD/唯一激活/删除保护/测试连接/厂商预设/模型发现）+ openai/anthropic/ollama 三协议 + turn 级热切换（DB 优先/文件兜底）
+- **智能体画像**：per-agent 配置（步数/上下文预算/工具画像白名单/提示词补丁），消息级 `profile` 提示——token 开销按场景裁
 - **开放协议**：三张 Agent Card、A2A JSON-RPC、数字人注册表、协作房间（事件续传）
 - **周边**：goal/plan/todo、jobs/schedule（持久化）、workflow、terminal、扩展管理
 
@@ -64,6 +66,7 @@ docker build -t jnf-harness .                         # 容器镜像
 | `harness.plugins.dir` | 插件目录（空=自动：内核 jar 同级 `plugins/` → `./plugins`） |
 | `harness.plugins.auto-load` | 插件目录自动装载：新 jar 自动登记+激活，停用的不复活（默认 true） |
 | `harness.events.dir` | 会话事件/元数据目录（默认 `./data/events`） |
+| `harness.capabilities.*` | 能力开关（task/goal/a2a/digital-human/collaboration/jobs/schedule/terminal/extension，默认全开）：关闭=工具不注册、专属服务与 REST 不装配 |
 | `harness.approval.mode` | `REQUEST_APPROVAL`（默认）/ `AUTO_APPROVE` |
 | `harness.sandbox.mode` | `READ_ONLY` / `WORKSPACE_WRITE`（默认）/ `DANGER_FULL_ACCESS` |
 | `spring.datasource.url` | 默认 H2 文件库；MySQL 用环境变量覆盖 |
