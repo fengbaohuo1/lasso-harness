@@ -109,26 +109,42 @@ public class HarnessConsoleQueryController {
         return Response.success(Map.of("sessionId", meta.sessionId(), "deleted", meta.deleted()));
     }
 
-    /** 会话 token 用量（F6：由 Usage 事件聚合，事件里没有 usage 时全 0）。 */
+    /** 会话 token 用量（F6：由 Usage 事件聚合，事件里没有 usage 时全 0）。
+     * <p>C3 状态栏扩展：steps/toolCalls/contextTokens/compactions 亦全部事件聚合（重启后仍准确）。 */
     @GetMapping("/sessions/{sessionId}/usage")
     public Response<Map<String, Object>> usage(@PathVariable String sessionId) {
         long promptTokens = 0;
         long completionTokens = 0;
         long turns = 0;
+        long steps = 0;
+        long toolCalls = 0;
+        long compactions = 0;
+        long contextTokens = 0;
         for (SessionEventEntry entry : eventStore.load(sessionId)) {
             SessionEvent event = entry.event();
             if (event instanceof SessionEvent.Usage usage) {
                 promptTokens += usage.promptTokens();
                 completionTokens += usage.completionTokens();
+                contextTokens = usage.promptTokens(); // 最近一次 LLM 调用的上下文占用估计
             } else if (event instanceof SessionEvent.TurnStart) {
                 turns++;
+            } else if (event instanceof SessionEvent.StepEnd) {
+                steps++;
+            } else if (event instanceof SessionEvent.ToolCall) {
+                toolCalls++;
+            } else if (event instanceof SessionEvent.Compacted) {
+                compactions++;
             }
         }
         return Response.success(Map.of(
                 "promptTokens", promptTokens,
                 "completionTokens", completionTokens,
                 "totalTokens", promptTokens + completionTokens,
-                "turns", turns));
+                "turns", turns,
+                "steps", steps,
+                "toolCalls", toolCalls,
+                "contextTokens", contextTokens,
+                "compactions", compactions));
     }
 
     /** 目录/文件时间：目录取创建时间（兜底最近修改），文件取最近修改；无文件返回 0。 */

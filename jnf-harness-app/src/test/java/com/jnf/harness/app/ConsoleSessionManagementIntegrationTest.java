@@ -36,24 +36,31 @@ class ConsoleSessionManagementIntegrationTest {
     ISessionEventStore eventStore;
 
     @Test
-    @DisplayName("列表增强 → 重命名 → 空标题 40000 → 软删后列表过滤 → usage 聚合")
+    @DisplayName("列表增强 → 重命名 → 空标题 40000 → 软删后列表过滤 → usage 聚合（含 C3 状态栏扩展）")
     void session_lifecycle() {
         String sessionId = "s-console-" + UUID.randomUUID();
         long seq = 0;
         eventStore.append(sessionId, new SessionEventEntry(++seq, new SessionEvent.TurnStart(1)));
         eventStore.append(sessionId, new SessionEventEntry(++seq,
                 new SessionEvent.UserMessage(1, 1, "你好")));
+        eventStore.append(sessionId, new SessionEventEntry(++seq, new SessionEvent.StepStart(1, 1)));
+        eventStore.append(sessionId, new SessionEventEntry(++seq, new SessionEvent.StepEnd(1, 1)));
+        eventStore.append(sessionId, new SessionEventEntry(++seq,
+                new SessionEvent.ToolCall(1, 1, "c1", "fs_read", java.util.Map.of("path", "a.txt"))));
         eventStore.append(sessionId, new SessionEventEntry(++seq,
                 new SessionEvent.Usage(1, 1, 100, 20)));
         eventStore.append(sessionId, new SessionEventEntry(++seq,
                 new SessionEvent.Usage(1, 2, 30, 5)));
+        eventStore.append(sessionId, new SessionEventEntry(++seq,
+                new SessionEvent.Compacted("早期小结", java.util.List.of(1L))));
         eventStore.append(sessionId, new SessionEventEntry(++seq, new SessionEvent.TurnStart(2)));
+        eventStore.append(sessionId, new SessionEventEntry(++seq, new SessionEvent.StepEnd(2, 1)));
         eventStore.append(sessionId, new SessionEventEntry(++seq,
                 new SessionEvent.Usage(2, 1, 10, 2)));
 
         // 列表增强
         Map<String, Object> item = findItem(controller.sessions().data(), sessionId);
-        assertEquals(6, item.get("eventCount"));
+        assertEquals(11, item.get("eventCount"));
         assertTrue((Long) item.get("createdAt") > 0);
         assertTrue((Long) item.get("lastEventAt") > 0);
 
@@ -71,6 +78,11 @@ class ConsoleSessionManagementIntegrationTest {
         assertEquals(27L, usage.get("completionTokens"));
         assertEquals(167L, usage.get("totalTokens"));
         assertEquals(2L, usage.get("turns"));
+        // C3 状态栏扩展：步数/工具调用/上下文占用（最近一次 promptTokens）/压缩次数
+        assertEquals(2L, usage.get("steps"));
+        assertEquals(1L, usage.get("toolCalls"));
+        assertEquals(10L, usage.get("contextTokens"));
+        assertEquals(1L, usage.get("compactions"));
 
         // 软删后列表过滤（事件文件保留，可回放）
         assertEquals("00000", controller.delete(sessionId).code());

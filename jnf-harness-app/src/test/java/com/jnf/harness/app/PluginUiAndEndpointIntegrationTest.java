@@ -71,13 +71,15 @@ class PluginUiAndEndpointIntegrationTest {
                 PluginRegistryService.RUNTIME_JAVA_NATIVE, SAMPLE_JAR.toString(), null, null));
         registry.activate("sample-tools");
 
-        // UI 清单：toolRenderers + settingsPage（独立配置页面）
+        // UI 清单：toolRenderers + settingsPage（独立配置页面）+ C5 贡献点（slashCommands/mentionProviders）
         Object ui = pluginController.ui("sample-tools").data();
         assertNotNull(ui, "sample 应带 UI 贡献清单");
         String uiJson = new ObjectMapper().writeValueAsString(ui);
         assertTrue(uiJson.contains("toolRenderers"));
         assertTrue(uiJson.contains("settingsPage"));
         assertTrue(uiJson.contains("test-connection"), "配置页动作按钮应指向插件端点");
+        assertTrue(uiJson.contains("slashCommands"), "sample 应示范 slashCommands 贡献点");
+        assertTrue(uiJson.contains("mentionProviders"), "sample 应示范 mentionProviders 贡献点");
 
         // list 项带 hasUi
         Map<String, Object> item = pluginController.list().data().stream()
@@ -94,12 +96,64 @@ class PluginUiAndEndpointIntegrationTest {
                 request("POST", "/api/harness/plugins/sample-tools/api/test-connection"), "{\"note\":\"hi\"}");
         assertEquals("00000", probe.code());
 
-        // 卸载：端点随事务边界回收
+        // C5：@ 提及源示范端点（候选 items / 展开 content）
+        Response<Object> snippets = pluginApiController.invoke("sample-tools",
+                request("GET", "/api/harness/plugins/sample-tools/api/list-snippets"), null);
+        assertEquals("00000", snippets.code());
+        assertTrue(new ObjectMapper().writeValueAsString(snippets.data()).contains("greeting"));
+        MockHttpServletRequest readSnippet = request("GET",
+                "/api/harness/plugins/sample-tools/api/read-snippet");
+        readSnippet.setParameter("path", "report");
+        Response<Object> snippet = pluginApiController.invoke("sample-tools", readSnippet, null);
+        assertEquals("00000", snippet.code());
+        assertTrue(new ObjectMapper().writeValueAsString(snippet.data()).contains("周报"));
+
+        // 卸载：端点随事务边界回收（classpath 官方插件的端点仍在，只验 sample 已回收）
         registry.uninstall("sample-tools");
         Response<Object> gone = pluginApiController.invoke("sample-tools",
                 request("GET", "/api/harness/plugins/sample-tools/api/stats"), null);
         assertEquals("40000", gone.code());
-        assertTrue(endpointRegistry.size() == 0, "端点注册表应清空");
+        assertTrue(!endpointRegistry.pathExists("sample-tools", "stats"), "sample 端点注册表应清空");
+    }
+
+    @Test
+    @DisplayName("C2 @file 提及源：builtin-fs list-files 候选（忽略目录生效）+ read-file 展开（越界拒）")
+    void fs_mention_provider_endpoints() throws Exception {
+        Path root = Files.createTempDirectory("fs-mention");
+        Files.writeString(root.resolve("alpha.md"), "# alpha\n提及内容");
+        Files.createDirectories(root.resolve("node_modules"));
+        Files.writeString(root.resolve("node_modules/skip.js"), "ignored");
+
+        // 候选：空 q 全量（限 20），node_modules 忽略生效
+        MockHttpServletRequest list = request("GET", "/api/harness/plugins/builtin-fs/api/list-files");
+        list.setParameter("cwd", root.toString());
+        Response<Object> all = pluginApiController.invoke("builtin-fs", list, null);
+        assertEquals("00000", all.code());
+        String allJson = new ObjectMapper().writeValueAsString(all.data());
+        assertTrue(allJson.contains("alpha.md"), "候选应含 alpha.md");
+        assertTrue(!allJson.contains("skip.js"), "node_modules 忽略目录应生效");
+
+        // 候选：q 过滤
+        MockHttpServletRequest filtered = request("GET", "/api/harness/plugins/builtin-fs/api/list-files");
+        filtered.setParameter("cwd", root.toString());
+        filtered.setParameter("q", "alpha");
+        Response<Object> hits = pluginApiController.invoke("builtin-fs", filtered, null);
+        assertEquals("00000", hits.code());
+        assertTrue(new ObjectMapper().writeValueAsString(hits.data()).contains("alpha.md"));
+
+        // 展开：读内容
+        MockHttpServletRequest read = request("GET", "/api/harness/plugins/builtin-fs/api/read-file");
+        read.setParameter("cwd", root.toString());
+        read.setParameter("path", "alpha.md");
+        Response<Object> content = pluginApiController.invoke("builtin-fs", read, null);
+        assertEquals("00000", content.code());
+        assertTrue(new ObjectMapper().writeValueAsString(content.data()).contains("提及内容"));
+
+        // 展开：越界/不存在拒绝
+        MockHttpServletRequest outside = request("GET", "/api/harness/plugins/builtin-fs/api/read-file");
+        outside.setParameter("cwd", root.toString());
+        outside.setParameter("path", "../outside.txt");
+        assertEquals("40000", pluginApiController.invoke("builtin-fs", outside, null).code());
     }
 
     @Test

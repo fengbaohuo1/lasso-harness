@@ -35,6 +35,11 @@ public class SampleToolsPlugin extends AbstractHarnessPlugin {
     private static final AtomicLong WEATHER_QUERIES = new AtomicLong();
     private static final AtomicLong FILE_SUMMARIES = new AtomicLong();
 
+    /** @ 提及示范片段（mentionProviders readEndpoint 返回内容）。 */
+    private static final Map<String, String> SNIPPETS = Map.of(
+            "greeting", "你好！我是 sample-tools 插件提供的问候语片段。",
+            "report", "# 周报\n- 本周进展：\n- 下周计划：\n- 风险与求助：");
+
     public SampleToolsPlugin() {
         super(PLUGIN_ID);
     }
@@ -71,6 +76,15 @@ public class SampleToolsPlugin extends AbstractHarnessPlugin {
                 "ok", true,
                 "message", "sample-tools 连接正常（演示端点）",
                 "echoBody", request.bodyJson() == null ? "" : request.bodyJson())));
+        // C5：@ 提及源示范（mentionProviders 契约：候选 items + 展开 content）
+        context.registerEndpoint("GET", "list-snippets", request -> PluginHttpResponse.ok(Map.of(
+                "items", List.of(
+                        Map.of("value", "greeting", "label", "问候语模板", "description", "常用开场白"),
+                        Map.of("value", "report", "label", "周报模板", "description", "周报骨架")))));
+        context.registerEndpoint("GET", "read-snippet", request -> PluginHttpResponse.ok(Map.of(
+                "content", SNIPPETS.getOrDefault(
+                        String.valueOf(request.query().get("path")),
+                        "（未知片段）"))));
     }
 
     /** 天气查询（示例返回固定数据；JSON 结构供 UI 渲染器消费）。 */

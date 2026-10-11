@@ -42,5 +42,31 @@
       { "label": "测试连接", "method": "POST", "path": "test-connection", "bodyFrom": "form" },
       { "label": "查看调用统计", "method": "GET", "path": "stats" }
     ]
-  }
+  },
+  "slashCommands": [
+    {
+      "name": "weather",
+      "description": "查询城市天气（示例数据）",
+      "argumentHint": "城市名",
+      "template": "用 weather_query 查询 {arg} 的天气",
+      "mode": "insert"
+    },
+    {
+      "name": "summary",
+      "description": "文件摘要统计",
+      "argumentHint": "文件路径",
+      "template": "用 file_summary 摘要文件 {arg}",
+      "mode": "insert"
+    }
+  ],
+  "mentionProviders": [
+    {
+      "id": "snippets",
+      "trigger": "@",
+      "label": "示例片段",
+      "endpoint": "list-snippets",
+      "readEndpoint": "read-snippet",
+      "placeholder": "搜索片段…"
+    }
+  ]
 }

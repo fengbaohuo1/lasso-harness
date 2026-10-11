@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "toolRenderers": {
+    "fs_read": {
+      "title": "读取文件 · {args.path}",
+      "summary": "{args.path}",
+      "blocks": [
+        { "type": "text", "label": "路径", "source": "args.path" }
+      ]
+    },
+    "fs_write": {
+      "title": "写入文件 · {args.path}",
+      "summary": "{args.path}",
+      "blocks": [
+        { "type": "code", "label": "内容", "source": "args.content", "language": "text" }
+      ]
+    },
+    "fs_search": {
+      "title": "文件搜索 · {args.pattern}",
+      "summary": "{args.path}",
+      "blocks": [
+        { "type": "text", "label": "模式", "source": "args.pattern" },
+        { "type": "text", "label": "根目录", "source": "args.path" }
+      ]
+    },
+    "fs_grep": {
+      "title": "内容搜索 · {args.pattern}",
+      "summary": "{args.glob}",
+      "blocks": [
+        { "type": "text", "label": "正则", "source": "args.pattern" },
+        { "type": "text", "label": "过滤", "source": "args.glob" }
+      ]
+    }
+  },
+  "slashCommands": [
+    {
+      "name": "files",
+      "description": "读取文件并按需分析",
+      "argumentHint": "路径",
+      "template": "请读取文件 {arg} 并按需分析",
+      "mode": "insert"
+    }
+  ],
+  "mentionProviders": [
+    {
+      "id": "files",
+      "trigger": "@",
+      "label": "工作区文件",
+      "endpoint": "list-files",
+      "readEndpoint": "read-file",
+      "placeholder": "搜索文件…"
+    }
+  ]
+}
