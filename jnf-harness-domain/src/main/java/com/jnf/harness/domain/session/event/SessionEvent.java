@@ -9,7 +9,8 @@ import java.util.Map;
 public sealed interface SessionEvent
         permits SessionEvent.TurnStart, SessionEvent.TurnEnd,
         SessionEvent.StepStart, SessionEvent.StepEnd,
-        SessionEvent.UserMessage, SessionEvent.AssistantChunk, SessionEvent.AssistantMessage,
+        SessionEvent.UserMessage, SessionEvent.AssistantChunk, SessionEvent.ReasoningChunk,
+        SessionEvent.AssistantMessage,
         SessionEvent.ToolCall, SessionEvent.ToolResult, SessionEvent.Compacted, SessionEvent.Usage {
 
     record TurnStart(long turn) implements SessionEvent {
@@ -29,6 +30,10 @@ public sealed interface SessionEvent
 
     /** 文本流增量（仅 UI 呈现用；重放以 AssistantMessage 为准）。 */
     record AssistantChunk(long turn, long step, String text) implements SessionEvent {
+    }
+
+    /** 思考内容流增量（P9-8：仅 UI 呈现/回放用，不进 deriveMessages 上下文）。 */
+    record ReasoningChunk(long turn, long step, String text) implements SessionEvent {
     }
 
     record AssistantMessage(long turn, long step, String text) implements SessionEvent {

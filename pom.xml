@@ -30,6 +30,7 @@
     <module>jnf-harness-plugin-web</module>
     <module>jnf-harness-plugin-essentials</module>
     <module>jnf-harness-plugin-subagent</module>
+    <module>jnf-harness-plugin-sandbox</module>
     <module>jnf-harness-app</module>
   </modules>
 
@@ -108,6 +109,11 @@
       <dependency>
         <groupId>com.jnf.harness</groupId>
         <artifactId>jnf-harness-plugin-subagent</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.jnf.harness</groupId>
+        <artifactId>jnf-harness-plugin-sandbox</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

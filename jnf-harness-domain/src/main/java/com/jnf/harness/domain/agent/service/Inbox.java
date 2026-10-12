@@ -12,15 +12,15 @@ import java.util.concurrent.CompletableFuture;
  */
 public class Inbox {
 
-    /** 待处理消息：文本 + 完成信号 + 可选流式监听（每问一监听）+ 可选模型/画像提示（F2/A1）。 */
-    public record PendingMessage(String text, String modelHint, String profileHint,
+    /** 待处理消息：文本 + 完成信号 + 可选流式监听（每问一监听）+ 可选模型/画像/思考强度提示（F2/A1/P9-8）。 */
+    public record PendingMessage(String text, String modelHint, String profileHint, String thinkingHint,
                                  CompletableFuture<TurnSummary> future,
                                  com.jnf.harness.domain.agent.service.run.AgentEventListener listener) {
 
-        /** 兼容旧构造面（无模型/画像提示）。 */
+        /** 兼容旧构造面（无模型/画像/思考提示）。 */
         public PendingMessage(String text, CompletableFuture<TurnSummary> future,
                               com.jnf.harness.domain.agent.service.run.AgentEventListener listener) {
-            this(text, null, null, future, listener);
+            this(text, null, null, null, future, listener);
         }
     }
 

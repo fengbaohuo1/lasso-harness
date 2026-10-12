@@ -71,6 +71,9 @@ public class HarnessConsoleQueryController {
             item.put("events", entries.size());        // 旧字段保留兼容
             item.put("eventCount", entries.size());
             item.put("title", meta == null ? null : meta.title());
+            item.put("workspaceCode", meta == null ? null : meta.workspaceCode());
+            item.put("presetCode", meta == null ? null : meta.presetCode());
+            item.put("reasoningEffort", meta == null ? null : meta.reasoningEffort());
             item.put("createdAt", fileTime(eventsRoot.resolve(sessionId), true));
             item.put("lastEventAt", fileTime(eventsRoot.resolve(sessionId).resolve("events.jsonl"), false));
             result.add(item);
@@ -80,16 +83,84 @@ public class HarnessConsoleQueryController {
         return Response.success(result);
     }
 
-    /** 会话消息回放（由事件重建）。 */
+    /** 会话消息回放（由事件重建；P9-8：assistant 消息附思考内容）。 */
     @GetMapping("/sessions/{sessionId}/messages")
     public Response<List<Map<String, Object>>> messages(@PathVariable String sessionId) {
         SessionLog log = new SessionLog();
-        log.appendBatch(eventStore.load(sessionId).stream().map(SessionEventEntry::event).toList());
+        List<SessionEventEntry> entries = eventStore.load(sessionId);
+        log.appendBatch(entries.stream().map(SessionEventEntry::event).toList());
+        // P9-8：按 (turn,step) 聚合思考内容；AssistantMessage 事件序 ↔ 助手文本消息序一一对应
+        //（压缩覆盖的条目跳过；ToolCall 事件虽是 assistant 源但不算文本消息）
+        java.util.Set<Long> compactedSeqs = new java.util.HashSet<>();
+        for (SessionEventEntry entry : entries) {
+            if (entry.event() instanceof SessionEvent.Compacted compacted) {
+                compactedSeqs.addAll(compacted.sourceSeqs());
+            }
+        }
+        Map<String, String> reasoningByStep = new LinkedHashMap<>();
+        List<String> assistantKeys = new ArrayList<>();
+        for (SessionEventEntry entry : entries) {
+            if (compactedSeqs.contains(entry.seq())) {
+                continue;
+            }
+            SessionEvent event = entry.event();
+            if (event instanceof SessionEvent.ReasoningChunk chunk) {
+                reasoningByStep.merge(chunk.turn() + ":" + chunk.step(), chunk.text(), String::concat);
+            } else if (event instanceof SessionEvent.AssistantMessage assistant) {
+                assistantKeys.add(assistant.turn() + ":" + assistant.step());
+            }
+        }
         List<Map<String, Object>> messages = new ArrayList<>();
+        int assistantIndex = 0;
         for (Message message : log.deriveMessages()) {
-            messages.add(serialize(message));
+            Map<String, Object> json = serialize(message);
+            boolean textOnly = message.source() == com.jnf.harness.model.MessageSource.ASSISTANT
+                    && message.blocks().stream().noneMatch(b -> b instanceof ToolCallBlock);
+            if (textOnly && assistantIndex < assistantKeys.size()) {
+                String reasoning = reasoningByStep.get(assistantKeys.get(assistantIndex));
+                if (reasoning != null && !reasoning.isBlank()) {
+                    json.put("reasoning", reasoning);
+                }
+                assistantIndex++;
+            }
+            messages.add(json);
         }
         return Response.success(messages);
+    }
+
+    /** P9：会话设置（工作区/智能体预设/思考强度）。 */
+    @GetMapping("/sessions/{sessionId}/settings")
+    public Response<Map<String, Object>> sessionSettings(@PathVariable String sessionId) {
+        SessionMeta meta = sessionMetaService.find(sessionId)
+                .orElseGet(() -> new SessionMeta(sessionId, null, false, System.currentTimeMillis()));
+        return Response.success(settingsJson(meta));
+    }
+
+    /** P9：更新会话设置（合并语义：缺省字段沿用原值）。 */
+    @PatchMapping("/sessions/{sessionId}/settings")
+    public Response<Map<String, Object>> updateSessionSettings(@PathVariable String sessionId,
+                                                               @RequestBody Map<String, Object> body) {
+        try {
+            SessionMeta meta = sessionMetaService.updateSettings(sessionId,
+                    strOf(body.get("workspaceCode")), strOf(body.get("presetCode")),
+                    strOf(body.get("reasoningEffort")));
+            return Response.success(settingsJson(meta));
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return Response.invalidArgument(e.getMessage());
+        }
+    }
+
+    private static String strOf(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static Map<String, Object> settingsJson(SessionMeta meta) {
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("sessionId", meta.sessionId());
+        json.put("workspaceCode", meta.workspaceCode());
+        json.put("presetCode", meta.presetCode());
+        json.put("reasoningEffort", meta.reasoningEffort());
+        return json;
     }
 
     /** 重命名会话（F3）。 */

@@ -44,6 +44,7 @@ public class AgentProfileRepository implements IAgentProfileRepository {
 
     private static AgentProfile toRecord(AgentProfilePO po) {
         return new AgentProfile(po.getProfileCode(), po.getDisplayName(),
+                po.getDescription(), po.getModelCode(), po.getReasoningEffort(),
                 po.getMaxStepsPerTurn(), po.getMaxTokenContinuations(),
                 po.getContextTokenBudget(), po.getKeepRecentMessages(),
                 po.getCompactionThresholdTokens(), po.getMaxTokens(), po.getTemperature(),
@@ -54,6 +55,9 @@ public class AgentProfileRepository implements IAgentProfileRepository {
         AgentProfilePO po = new AgentProfilePO();
         po.setProfileCode(profile.profileCode());
         po.setDisplayName(profile.displayName() == null ? profile.profileCode() : profile.displayName());
+        po.setDescription(profile.description());
+        po.setModelCode(profile.modelCode());
+        po.setReasoningEffort(profile.reasoningEffort());
         po.setMaxStepsPerTurn(profile.maxStepsPerTurn());
         po.setMaxTokenContinuations(profile.maxTokenContinuations());
         po.setContextTokenBudget(profile.contextTokenBudget());

@@ -12,6 +12,10 @@ public interface AgentEventListener {
     default void onChunk(String text) {
     }
 
+    /** 思考内容流增量（P9-8）。 */
+    default void onReasoning(String text) {
+    }
+
     default void onToolCall(ToolCallBlock call) {
     }
 

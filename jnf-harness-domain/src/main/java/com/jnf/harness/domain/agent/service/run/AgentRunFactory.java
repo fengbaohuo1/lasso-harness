@@ -24,21 +24,34 @@ public class AgentRunFactory {
 
     private final ILlmRuntimePort llm;
     private final ToolRunner toolRunner;
-    /** 选项解析（F2/A1）：入参为 per-message 模型提示与画像提示（均可空）。 */
-    private final java.util.function.BiFunction<String, String, AgentOptions> optionsResolver;
+    /** 选项解析（F2/A1/P9-8）：入参为 per-turn 模型/预设/思考强度提示（均可空）。 */
+    private final com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsResolver;
     /** 工具 schema 供应商：按画像工具码现算（R5）。 */
     private final java.util.function.Function<String, List<Map<String, Object>>> toolSchemas;
     private final ISessionEventStore store;
     private final SystemPromptAssembler promptAssembler;
     private final CompactionEngine compactionEngine;
+    /** 会话工作区根解析（P9-1）：sessionId → cwd。 */
+    private final java.util.function.Function<String, String> cwdResolver;
     private final Map<String, ReactLoopAgent> agents = new ConcurrentHashMap<>();
 
     public AgentRunFactory(ILlmRuntimePort llm, ToolRunner toolRunner,
-                           java.util.function.BiFunction<String, String, AgentOptions> optionsResolver,
+                           com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsResolver,
                            java.util.function.Function<String, List<Map<String, Object>>> toolSchemas,
                            ISessionEventStore store,
                            SystemPromptAssembler promptAssembler,
                            CompactionEngine compactionEngine) {
+        this(llm, toolRunner, optionsResolver, toolSchemas, store, promptAssembler, compactionEngine,
+                sessionId -> java.nio.file.Path.of("").toAbsolutePath().toString());
+    }
+
+    public AgentRunFactory(ILlmRuntimePort llm, ToolRunner toolRunner,
+                           com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsResolver,
+                           java.util.function.Function<String, List<Map<String, Object>>> toolSchemas,
+                           ISessionEventStore store,
+                           SystemPromptAssembler promptAssembler,
+                           CompactionEngine compactionEngine,
+                           java.util.function.Function<String, String> cwdResolver) {
         this.llm = llm;
         this.toolRunner = toolRunner;
         this.optionsResolver = optionsResolver;
@@ -46,6 +59,7 @@ public class AgentRunFactory {
         this.store = store;
         this.promptAssembler = promptAssembler;
         this.compactionEngine = compactionEngine;
+        this.cwdResolver = cwdResolver;
     }
 
     /** 兼容旧构造面：无 per-message 模型/画像提示语义的选项与 schema 供应。 */
@@ -55,7 +69,7 @@ public class AgentRunFactory {
                            ISessionEventStore store,
                            SystemPromptAssembler promptAssembler,
                            CompactionEngine compactionEngine) {
-        this(llm, toolRunner, (modelHint, profileHint) -> optionsSupplier.get(),
+        this(llm, toolRunner, (modelHint, profileHint, thinkingHint) -> optionsSupplier.get(),
                 toolProfile -> schemasSupplier.get(), store, promptAssembler, compactionEngine);
     }
 
@@ -70,7 +84,8 @@ public class AgentRunFactory {
             }
             PersistingSessionLog session = new PersistingSessionLog(id, log, store);
             return new ReactLoopAgent(id, session, llm, optionsResolver,
-                    toolRunner, toolSchemas, promptAssembler, compactionEngine, defaultListener);
+                    toolRunner, toolSchemas, promptAssembler, compactionEngine, defaultListener,
+                    cwdResolver);
         });
     }
 

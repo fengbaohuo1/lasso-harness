@@ -55,11 +55,13 @@ public class ReactLoopAgent {
     private final String agentId;
     private final PersistingSessionLog session;
     private final ILlmRuntimePort llm;
-    /** 选项解析（F2/A1）：入参为本 turn 的模型提示与画像提示（均可空）。 */
-    private final java.util.function.BiFunction<String, String, AgentOptions> optionsRef;
+    /** 选项解析（F2/A1/P9-8）：入参为本 turn 的模型/预设/思考强度提示（均可空）。 */
+    private final com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsRef;
     private final ToolRunner toolRunner;
     /** 工具 schema 供应商：按画像工具码现算（R5 画像白名单——token 开销按场景裁）。 */
     private final java.util.function.Function<String, List<Map<String, Object>>> toolSchemas;
+    /** 会话工作区根解析（P9-1）：sessionId → cwd（工具相对路径基准、沙箱工作区根）。 */
+    private final java.util.function.Function<String, String> cwdResolver;
     private final SystemPromptAssembler promptAssembler;
     private final CompactionEngine compactionEngine;
     private final AgentEventListener listener;
@@ -75,19 +77,34 @@ public class ReactLoopAgent {
     private volatile Phase phase = new Phase.Idle();
     private volatile String turnModelHint;
     private volatile String turnProfileHint;
+    private volatile String turnThinkingHint;
 
     public ReactLoopAgent(String agentId, PersistingSessionLog session, ILlmRuntimePort llm,
-                          java.util.function.BiFunction<String, String, AgentOptions> optionsRef,
+                          com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsRef,
                           ToolRunner toolRunner,
                           java.util.function.Function<String, List<Map<String, Object>>> toolSchemas,
                           SystemPromptAssembler promptAssembler,
                           CompactionEngine compactionEngine, AgentEventListener listener) {
+        this(agentId, session, llm, optionsRef, toolRunner, toolSchemas, promptAssembler,
+                compactionEngine, listener,
+                sessionId -> java.nio.file.Path.of("").toAbsolutePath().toString());
+    }
+
+    public ReactLoopAgent(String agentId, PersistingSessionLog session, ILlmRuntimePort llm,
+                          com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsRef,
+                          ToolRunner toolRunner,
+                          java.util.function.Function<String, List<Map<String, Object>>> toolSchemas,
+                          SystemPromptAssembler promptAssembler,
+                          CompactionEngine compactionEngine, AgentEventListener listener,
+                          java.util.function.Function<String, String> cwdResolver) {
         this.agentId = agentId;
         this.session = session;
         this.llm = llm;
         this.optionsRef = optionsRef;
         this.toolRunner = toolRunner;
         this.toolSchemas = toolSchemas;
+        this.cwdResolver = cwdResolver == null
+                ? sessionId -> java.nio.file.Path.of("").toAbsolutePath().toString() : cwdResolver;
         this.promptAssembler = promptAssembler;
         this.compactionEngine = compactionEngine;
         this.listener = listener == null ? new AgentEventListener() {
@@ -110,11 +127,18 @@ public class ReactLoopAgent {
         return ask(text, null, listener);
     }
 
-    /** 提交一条用户消息（F2/A1：可带 per-message 模型/画像提示）。 */
+    /** 提交一条用户消息（F2/A1：可带 per-message 模型/预设提示）。 */
     public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, String profileHint,
                                                     AgentEventListener listener) {
+        return ask(text, modelHint, profileHint, null, listener);
+    }
+
+    /** 提交一条用户消息（F2/A1/P9-8：可带 per-message 模型/预设/思考强度提示）。 */
+    public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, String profileHint,
+                                                    String thinkingHint, AgentEventListener listener) {
         Inbox.PendingMessage message =
-                new Inbox.PendingMessage(text, modelHint, profileHint, new CompletableFuture<>(), listener);
+                new Inbox.PendingMessage(text, modelHint, profileHint, thinkingHint,
+                        new CompletableFuture<>(), listener);
         inbox.add(message);
         if (started.compareAndSet(false, true)) {
             driver.submit(this::driverLoop);
@@ -194,6 +218,11 @@ public class ReactLoopAgent {
         // A1：本 turn 画像提示（取首个非空；旋钮/工具画像/提示词补丁按画像裁）
         turnProfileHint = claimed.stream()
                 .map(Inbox.PendingMessage::profileHint)
+                .filter(hint -> hint != null && !hint.isBlank())
+                .findFirst().orElse(null);
+        // P9-8：本 turn 思考强度提示（取首个非空；回落预设的 reasoningEffort）
+        turnThinkingHint = claimed.stream()
+                .map(Inbox.PendingMessage::thinkingHint)
                 .filter(hint -> hint != null && !hint.isBlank())
                 .findFirst().orElse(null);
         // 事件分发：默认监听 + 本 turn 首个消息的专属监听
@@ -322,6 +351,12 @@ public class ReactLoopAgent {
             }
 
             @Override
+            public void onReasoning(String text) {
+                a.onReasoning(text);
+                b.onReasoning(text);
+            }
+
+            @Override
             public void onToolCall(ToolCallBlock call) {
                 a.onToolCall(call);
                 b.onToolCall(call);
@@ -349,7 +384,11 @@ public class ReactLoopAgent {
 
     private ToolExecutionResult executeTool(ToolCallBlock call) {
         try {
-            CompletableFuture<ToolExecutionResult> future = toolRunner.run(call);
+            // P9-1：按会话注入真实 agentId/sessionId/cwd（工作区根即沙箱工作区）
+            com.jnf.harness.model.ToolRunContext context =
+                    new com.jnf.harness.domain.tool.service.DefaultToolRunContext(
+                            agentId, agentId, cwdResolver.apply(agentId));
+            CompletableFuture<ToolExecutionResult> future = toolRunner.run(call, context);
             return future.get(300, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             return ToolExecutionResult.fail("工具执行超时", "TOOL_TIMEOUT");
@@ -371,6 +410,7 @@ public class ReactLoopAgent {
                 .toolSchemas(toolSchemas.apply(options.toolProfile()))
                 .maxTokens(options.maxTokens())
                 .temperature(options.temperature())
+                .reasoningEffort(options.reasoningEffort())
                 .build();
 
         BlockAssembler assembler = new BlockAssembler();
@@ -389,6 +429,10 @@ public class ReactLoopAgent {
                 if (chunk instanceof StreamChunk.TextDelta delta) {
                     session.append(new SessionEvent.AssistantChunk(turn, step, delta.text()));
                     events.onChunk(delta.text());
+                } else if (chunk instanceof StreamChunk.ReasoningDelta delta) {
+                    // P9-8：思考内容流（仅呈现/回放，不进模型上下文）
+                    session.append(new SessionEvent.ReasoningChunk(turn, step, delta.text()));
+                    events.onReasoning(delta.text());
                 }
             }
 
@@ -458,7 +502,7 @@ public class ReactLoopAgent {
 
     /** 运行选项（M4：turn/step 级解析，支撑渠道热切换）。 */
     private AgentOptions options() {
-        return optionsRef.apply(turnModelHint, turnProfileHint);
+        return optionsRef.resolve(turnModelHint, turnProfileHint, turnThinkingHint);
     }
 
     private long estimateTokens(List<Message> messages) {

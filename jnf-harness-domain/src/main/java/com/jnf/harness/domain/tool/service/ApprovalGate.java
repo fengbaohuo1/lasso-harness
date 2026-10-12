@@ -12,4 +12,10 @@ public interface ApprovalGate {
     ApprovalGate ALLOW_ALL = (toolName, arguments) -> true;
 
     boolean allow(String toolName, Map<String, Object> arguments);
+
+    /** 会话感知形态（P9）：审批记录落真实 sessionId，默认回落无会话形态。 */
+    default boolean allow(com.jnf.harness.model.ToolRunContext context, String toolName,
+                          Map<String, Object> arguments) {
+        return allow(toolName, arguments);
+    }
 }

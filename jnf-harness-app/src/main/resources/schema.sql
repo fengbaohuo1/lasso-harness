@@ -173,10 +173,13 @@ CREATE TABLE IF NOT EXISTS room_event (
 );
 CREATE INDEX IF NOT EXISTS idx_room_event_room_seq ON room_event (room_id, seq);
 
--- 智能体画像（A1：步数/预算/工具画像/提示词补丁按场景裁运行开销；default 画像可虚拟存在）
+-- 智能体预设（P9-7，由 A1 画像拓展：步数/预算/工具画像/提示词补丁/描述/模型偏好/思考强度）
 CREATE TABLE IF NOT EXISTS harness_agent_profile (
     profile_code               VARCHAR(64)  PRIMARY KEY,
     display_name               VARCHAR(128),
+    description                VARCHAR(500),
+    model_code                 VARCHAR(128),
+    reasoning_effort           VARCHAR(16),
     max_steps_per_turn         INT,
     max_token_continuations    INT,
     context_token_budget       BIGINT,
@@ -186,6 +189,18 @@ CREATE TABLE IF NOT EXISTS harness_agent_profile (
     temperature                DOUBLE,
     tool_profile               VARCHAR(64)  DEFAULT 'default',
     prompt_extra               TEXT
+);
+
+-- P9-7 老库自愈：补智能体预设扩展列（H2 语法；新库无感）
+ALTER TABLE harness_agent_profile ADD COLUMN IF NOT EXISTS description VARCHAR(500);
+ALTER TABLE harness_agent_profile ADD COLUMN IF NOT EXISTS model_code VARCHAR(128);
+ALTER TABLE harness_agent_profile ADD COLUMN IF NOT EXISTS reasoning_effort VARCHAR(16);
+
+-- P9-1 工作区注册表（default 行由 WorkspaceService 启动时保证）
+CREATE TABLE IF NOT EXISTS harness_workspace (
+    workspace_code VARCHAR(64)   PRIMARY KEY,
+    display_name   VARCHAR(128),
+    root_path      VARCHAR(1024)
 );
 
 

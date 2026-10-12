@@ -68,6 +68,12 @@ public class AgentStreamApi {
         }
 
         @Override
+        public void onReasoning(String content) {
+            // P9-8：思考内容流（前端折叠展示）
+            send("thinking", Map.of("content", content));
+        }
+
+        @Override
         public void onStepBreak(String toolName, String callId, String argsJson, String status) {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("toolName", toolName);

@@ -54,6 +54,11 @@ public final class SessionEventJsonCodec {
             root.put("turn", e.turn());
             root.put("step", e.step());
             root.put("text", e.text());
+        } else if (event instanceof SessionEvent.ReasoningChunk e) {
+            root.put("type", "reasoning_chunk");
+            root.put("turn", e.turn());
+            root.put("step", e.step());
+            root.put("text", e.text());
         } else if (event instanceof SessionEvent.AssistantMessage e) {
             root.put("type", "assistant_message");
             root.put("turn", e.turn());
@@ -103,6 +108,8 @@ public final class SessionEventJsonCodec {
             case "user_message" -> new SessionEvent.UserMessage(
                     root.path("turn").asLong(), root.path("step").asLong(), root.path("text").asText(""));
             case "assistant_chunk" -> new SessionEvent.AssistantChunk(
+                    root.path("turn").asLong(), root.path("step").asLong(), root.path("text").asText(""));
+            case "reasoning_chunk" -> new SessionEvent.ReasoningChunk(
                     root.path("turn").asLong(), root.path("step").asLong(), root.path("text").asText(""));
             case "assistant_message" -> new SessionEvent.AssistantMessage(
                     root.path("turn").asLong(), root.path("step").asLong(), root.path("text").asText(""));

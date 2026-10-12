@@ -35,7 +35,8 @@ public class FileSessionMetaStore implements ISessionMetaStore {
             MetaJson json = MAPPER.readValue(file.toFile(), MetaJson.class);
             return Optional.of(new SessionMeta(sessionId,
                     json.title == null || json.title.isBlank() ? null : json.title,
-                    json.deleted, json.updatedAt));
+                    json.deleted, json.updatedAt,
+                    json.workspaceCode, json.presetCode, json.reasoningEffort));
         } catch (IOException e) {
             throw new UncheckedIOException("读取会话元数据失败: " + file, e);
         }
@@ -50,6 +51,9 @@ public class FileSessionMetaStore implements ISessionMetaStore {
             json.title = meta.title();
             json.deleted = meta.deleted();
             json.updatedAt = meta.updatedAt();
+            json.workspaceCode = meta.workspaceCode();
+            json.presetCode = meta.presetCode();
+            json.reasoningEffort = meta.reasoningEffort();
             Path tmp = file.resolveSibling("meta.json.tmp");
             MAPPER.writerWithDefaultPrettyPrinter().writeValue(tmp.toFile(), json);
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
@@ -67,5 +71,8 @@ public class FileSessionMetaStore implements ISessionMetaStore {
         public String title;
         public boolean deleted;
         public long updatedAt;
+        public String workspaceCode;
+        public String presetCode;
+        public String reasoningEffort;
     }
 }

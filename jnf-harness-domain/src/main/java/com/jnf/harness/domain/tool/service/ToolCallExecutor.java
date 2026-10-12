@@ -56,11 +56,22 @@ public class ToolCallExecutor implements ToolRunner {
 
     @Override
     public CompletableFuture<ToolExecutionResult> run(ToolCallBlock call) {
-        return CompletableFuture.supplyAsync(() -> executeBlocking(call), workers);
+        return run(call, null);
+    }
+
+    /** 会话感知形态（P9-1/P9-2）：context 为空回落默认上下文。 */
+    @Override
+    public CompletableFuture<ToolExecutionResult> run(ToolCallBlock call, ToolRunContext context) {
+        return CompletableFuture.supplyAsync(() -> executeBlocking(call, context), workers);
     }
 
     /** 同步执行（测试与调用方需要直接语义时使用）。 */
     public ToolExecutionResult executeBlocking(ToolCallBlock call) {
+        return executeBlocking(call, null);
+    }
+
+    /** 同步执行（会话感知形态）。 */
+    public ToolExecutionResult executeBlocking(ToolCallBlock call, ToolRunContext context) {
         try {
             semaphore.acquire();
         } catch (InterruptedException e) {
@@ -68,30 +79,30 @@ public class ToolCallExecutor implements ToolRunner {
             return ToolExecutionResult.fail("工具执行被中断", "TOOL_INTERRUPTED");
         }
         try {
-            return doExecute(call);
+            return doExecute(call, context == null ? this.context : context);
         } finally {
             semaphore.release();
         }
     }
 
-    private ToolExecutionResult doExecute(ToolCallBlock call) {
+    private ToolExecutionResult doExecute(ToolCallBlock call, ToolRunContext context) {
         // 1. 查找工具
         var tool = registry.lookup(call.name());
         if (tool.isEmpty()) {
             return ToolExecutionResult.fail("工具不存在: " + call.name(), "TOOL_NOT_FOUND");
         }
 
-        // 2. PRE Hook（BLOCK/DENY 均拦截）
+        // 2. PRE Hook（BLOCK/DENY 均拦截；会话感知评估优先）
         for (ToolLifecycleHook hook : hooks) {
-            PluginHookResult verdict = hook.beforeToolUse(call.name(), call.arguments());
+            PluginHookResult verdict = hook.beforeToolUse(context, call.name(), call.arguments());
             if (verdict.intercepted()) {
                 return ToolExecutionResult.fail(
                         "Blocked by tool hook: " + verdict.reason(), "HOOK_BLOCKED");
             }
         }
 
-        // 3. 审批闸（R1 运行期审批接线点）
-        if (!approvalGate.allow(call.name(), call.arguments())) {
+        // 3. 审批闸（R1 运行期审批接线点；P9：审批记录落真实 sessionId）
+        if (!approvalGate.allow(context, call.name(), call.arguments())) {
             return ToolExecutionResult.fail("工具调用需要审批: " + call.name(), "APPROVAL_REQUIRED");
         }
 
@@ -117,7 +128,7 @@ public class ToolCallExecutor implements ToolRunner {
         // 5. POST Hook（只观察）
         for (ToolLifecycleHook hook : hooks) {
             try {
-                hook.afterToolUse(call.name(), call.arguments(), result);
+                hook.afterToolUse(context, call.name(), call.arguments(), result);
             } catch (Exception e) {
                 // 观察型 Hook 不影响结果
             }

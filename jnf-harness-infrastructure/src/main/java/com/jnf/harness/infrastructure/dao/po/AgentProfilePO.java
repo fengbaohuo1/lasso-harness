@@ -1,12 +1,15 @@
 package com.jnf.harness.infrastructure.dao.po;
 
 /**
- * harness_agent_profile 行对象（A1 画像）。
+ * harness_agent_profile 行对象（P9-7 智能体预设）。
  */
 public class AgentProfilePO {
 
     private String profileCode;
     private String displayName;
+    private String description;
+    private String modelCode;
+    private String reasoningEffort;
     private int maxStepsPerTurn;
     private int maxTokenContinuations;
     private long contextTokenBudget;
@@ -31,6 +34,30 @@ public class AgentProfilePO {
 
     public void setDisplayName(String displayName) {
         this.displayName = displayName;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getModelCode() {
+        return modelCode;
+    }
+
+    public void setModelCode(String modelCode) {
+        this.modelCode = modelCode;
+    }
+
+    public String getReasoningEffort() {
+        return reasoningEffort;
+    }
+
+    public void setReasoningEffort(String reasoningEffort) {
+        this.reasoningEffort = reasoningEffort;
     }
 
     public int getMaxStepsPerTurn() {

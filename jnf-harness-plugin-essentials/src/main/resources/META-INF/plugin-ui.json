@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "toolRenderers": {
+    "todo_write": {
+      "title": "任务清单",
+      "summary": "整表更新待办快照",
+      "blocks": [
+        { "type": "table", "label": "待办", "source": "args.items" }
+      ]
+    }
+  }
+}

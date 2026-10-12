@@ -71,7 +71,7 @@ class SubagentHostServiceTest {
         assembler.registerSection(new SystemPromptAssembler.PromptSection("base", 0, "你是测试智能体。"));
         return new AgentRunFactory(llm,
                 call -> CompletableFuture.completedFuture(ToolExecutionResult.ok("unused")),
-                (hint, profile) -> new AgentOptions("m", LlmChannel.openai("http://127.0.0.1:1", "k"),
+                (hint, profile, thinking) -> new AgentOptions("m", LlmChannel.openai("http://127.0.0.1:1", "k"),
                         50, 4, 128_000, 6, 100_000L, null, null),
                 profile -> List.of(Map.of("name", "echo", "description", "echo", "parameters", Map.of())),
                 null, assembler, new BasicCompactionEngine(events -> "早期历史摘要"));

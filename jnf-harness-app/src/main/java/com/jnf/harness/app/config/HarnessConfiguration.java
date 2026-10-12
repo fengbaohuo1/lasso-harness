@@ -269,22 +269,31 @@ public class HarnessConfiguration {
                 service, gateMode, risky::contains, "session", timeoutSeconds);
     }
 
-    @Bean
-    public com.jnf.harness.domain.sandbox.SandboxGuardHook sandboxGuardHook(
-            @Value("${harness.sandbox.mode:WORKSPACE_WRITE}") String mode) {
-        return new com.jnf.harness.domain.sandbox.SandboxGuardHook(
-                com.jnf.harness.domain.sandbox.SandboxMode.from(mode),
-                Path.of("").toAbsolutePath());
-    }
+    // P9-2：静态 SandboxGuardHook 退役——三档权限由沙箱插件（jnf-harness-plugin-sandbox）
+    // 经 PRE_TOOL_USE Hook 运行期强制（按会话设模式），内核只留插件 Hook 落点。
 
     @Bean
     public ToolRunner toolRunner(ToolRegistry toolRegistry,
                                  com.jnf.harness.domain.tool.service.ToolHookRegistry hookRegistry,
-                                 com.jnf.harness.domain.task.approval.RuntimeApprovalGate approvalGate,
-                                 com.jnf.harness.domain.sandbox.SandboxGuardHook sandboxGuardHook) {
-        return new ToolCallExecutor(toolRegistry, List.of(sandboxGuardHook, hookRegistry), approvalGate,
+                                 com.jnf.harness.domain.task.approval.RuntimeApprovalGate approvalGate) {
+        return new ToolCallExecutor(toolRegistry, List.of(hookRegistry), approvalGate,
                 new DefaultToolRunContext("agent", "session",
                         Path.of("").toAbsolutePath().toString()), 300, 10);
+    }
+
+    // ---------------- P9-1：工作区管理 ----------------
+
+    @Bean
+    public com.jnf.harness.domain.runtime.workspace.IWorkspaceRepository workspaceRepository(
+            com.jnf.harness.infrastructure.dao.WorkspaceDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.setting.WorkspaceRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.runtime.workspace.WorkspaceService workspaceService(
+            com.jnf.harness.domain.runtime.workspace.IWorkspaceRepository repository,
+            com.jnf.harness.domain.session.meta.SessionMetaService sessionMetaService) {
+        return new com.jnf.harness.domain.runtime.workspace.WorkspaceService(repository, sessionMetaService);
     }
 
     // ---------------- 第 10 节收尾：任务五子域 ----------------
@@ -542,6 +551,7 @@ public class HarnessConfiguration {
                                            com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
                                            com.jnf.harness.domain.runtime.setting.ModelSettingService modelSettingService,
                                            com.jnf.harness.domain.agent.profile.AgentProfileService profileService,
+                                           com.jnf.harness.domain.runtime.workspace.WorkspaceService workspaceService,
                                            @Value("${harness.llm.default.base-url}") String baseUrl,
                                            @Value("${harness.llm.default.api-key}") String apiKey,
                                            @Value("${harness.llm.default.model}") String model) {
@@ -550,13 +560,16 @@ public class HarnessConfiguration {
         // 冻结快照会让插件工具永远不进模型工具表）
         java.util.function.Function<String, List<Map<String, Object>>> schemasSupplier =
                 toolProfile -> buildSchemas(toolCatalogPort, toolRegistry, toolProfile);
-        // F2/A1：模型 + 画像解析——per-message 模型提示优先（命中 modelCode 的渠道整渠道切换；
-        // 未命中作模型名覆盖在生效渠道上）；画像旋钮/工具画像/提示词补丁按 profile 提示裁
-        java.util.function.BiFunction<String, String, AgentOptions> optionsResolver = (hint, profileHint) -> {
+        // F2/A1/P9-7/P9-8：模型 + 预设 + 思考强度解析——per-message 模型提示优先（命中 modelCode 的
+        // 渠道整渠道切换；未命中作模型名覆盖在生效渠道上；无提示回落预设的模型偏好）；
+        // 思考强度提示优先于预设；预设旋钮/工具画像/提示词补丁按 profile 提示裁
+        com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsResolver =
+                (hint, profileHint, thinkingHint) -> {
             com.jnf.harness.domain.agent.profile.AgentProfile profile = profileService.resolve(profileHint);
+            String effectiveHint = (hint != null && !hint.isBlank()) ? hint : profile.modelCode();
             String modelCode;
             LlmChannel channel;
-            if (hint != null && !hint.isBlank()) {
+            if (effectiveHint != null && !effectiveHint.isBlank()) {
                 var byModel = modelSettingService.list().stream()
                         .filter(m -> hint.equals(m.modelCode()))
                         .findFirst();
@@ -570,12 +583,12 @@ public class HarnessConfiguration {
                     var active = modelSettingService.active();
                     if (active.isPresent()) {
                         var setting = active.get();
-                        modelCode = hint;
+                        modelCode = effectiveHint;
                         channel = new LlmChannel(setting.baseUrl(),
                                 modelSettingService.secrets().resolve(setting.apiKeyRef()),
                                 com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol()));
                     } else {
-                        modelCode = hint;
+                        modelCode = effectiveHint;
                         channel = LlmChannel.openai(baseUrl, apiKey);
                     }
                 }
@@ -592,14 +605,18 @@ public class HarnessConfiguration {
                     channel = LlmChannel.openai(baseUrl, apiKey);
                 }
             }
+            // P9-8：思考强度——per-message 提示优先于预设（空=不传，由供应商默认）
+            String reasoningEffort = (thinkingHint != null && !thinkingHint.isBlank())
+                    ? thinkingHint : profile.reasoningEffort();
             return new AgentOptions(modelCode, channel,
                     profile.maxStepsPerTurn(), profile.maxTokenContinuations(),
                     profile.contextTokenBudget(), profile.keepRecentMessages(),
                     profile.compactionThresholdTokens(), profile.maxTokens(), profile.temperature(),
-                    profile.toolProfile(), profile.promptExtra());
+                    profile.toolProfile(), profile.promptExtra(), reasoningEffort);
         };
         return new AgentRunFactory(llmRuntimePort, toolRunner, optionsResolver,
-                schemasSupplier, store, promptAssembler, compactionEngine);
+                schemasSupplier, store, promptAssembler, compactionEngine,
+                workspaceService::cwdFor);
     }
 
     @Bean

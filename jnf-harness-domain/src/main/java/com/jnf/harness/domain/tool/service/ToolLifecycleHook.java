@@ -1,6 +1,7 @@
 package com.jnf.harness.domain.tool.service;
 
 import com.jnf.harness.model.ToolExecutionResult;
+import com.jnf.harness.model.ToolRunContext;
 import com.jnf.harness.spi.PluginHookResult;
 
 import java.util.Map;
@@ -15,6 +16,18 @@ public interface ToolLifecycleHook {
         return PluginHookResult.allow();
     }
 
+    /** 会话感知形态（P9-2）：携带真实 ToolRunContext，默认回落无会话形态。 */
+    default PluginHookResult beforeToolUse(ToolRunContext context, String toolName,
+                                           Map<String, Object> arguments) {
+        return beforeToolUse(toolName, arguments);
+    }
+
     default void afterToolUse(String toolName, Map<String, Object> arguments, ToolExecutionResult result) {
+    }
+
+    /** 会话感知形态（P9-2）：携带真实 ToolRunContext，默认回落无会话形态。 */
+    default void afterToolUse(ToolRunContext context, String toolName,
+                              Map<String, Object> arguments, ToolExecutionResult result) {
+        afterToolUse(toolName, arguments, result);
     }
 }

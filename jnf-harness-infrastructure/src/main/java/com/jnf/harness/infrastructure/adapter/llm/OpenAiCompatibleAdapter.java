@@ -153,6 +153,10 @@ public class OpenAiCompatibleAdapter implements LlmAdapter {
         if (options.temperature() != null) {
             body.put("temperature", options.temperature());
         }
+        // P9-8 思考强度：OpenAI 兼容口径 reasoning_effort（off 不传，由供应商默认）
+        if (options.reasoningEffort() != null && !"off".equals(options.reasoningEffort())) {
+            body.put("reasoning_effort", options.reasoningEffort());
+        }
         return MAPPER.writeValueAsString(body);
     }
 

@@ -124,6 +124,10 @@ public class OllamaAdapter implements LlmAdapter {
         if (!options.toolSchemas().isEmpty()) {
             body.put("tools", options.toolSchemas());
         }
+        // P9-8 思考强度：Ollama think 开关（off=false，其余=true）
+        if (options.reasoningEffort() != null) {
+            body.put("think", !"off".equals(options.reasoningEffort()));
+        }
         return MAPPER.writeValueAsString(body);
     }
 

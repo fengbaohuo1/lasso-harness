@@ -75,6 +75,11 @@ public class AgentUseCaseImpl implements IAgentApi, IAgentStreamApi {
             }
 
             @Override
+            public void onReasoning(String text) {
+                sink.onReasoning(text);
+            }
+
+            @Override
             public void onToolCall(ToolCallBlock call) {
                 toolCalls++;
                 sink.onStepBreak(call.name(), call.callId(), toJson(call.arguments()), "begin");

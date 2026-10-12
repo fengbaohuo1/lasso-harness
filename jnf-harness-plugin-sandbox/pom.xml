@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.jnf.harness</groupId>
+        <artifactId>jnf-harness</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>jnf-harness-plugin-sandbox</artifactId>
+    <name>jnf-harness-plugin-sandbox</name>
+    <description>jnf 沙箱插件：三档权限模式（只读 / 工作区内读写 / 完全权限）的运行期强制</description>
+
+    <dependencies>
+        <!-- 插件 SDK：provided（宿主提供），插件只依赖契约 -->
+        <dependency>
+            <groupId>com.jnf.harness</groupId>
+            <artifactId>jnf-harness-types</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

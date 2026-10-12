@@ -185,6 +185,21 @@ public class AnthropicAdapter implements LlmAdapter {
         if (!options.toolSchemas().isEmpty()) {
             body.put("tools", options.toolSchemas());
         }
+        // P9-8 思考强度：Anthropic thinking 块（off=显式关闭，low/medium/high=按预算开启）
+        if (options.reasoningEffort() != null) {
+            Map<String, Object> thinking = new LinkedHashMap<>();
+            if ("off".equals(options.reasoningEffort())) {
+                thinking.put("type", "disabled");
+            } else {
+                thinking.put("type", "enabled");
+                thinking.put("budget_tokens", switch (options.reasoningEffort()) {
+                    case "low" -> 2048;
+                    case "high" -> 24576;
+                    default -> 8192;
+                });
+            }
+            body.put("thinking", thinking);
+        }
         return MAPPER.writeValueAsString(body);
     }
 

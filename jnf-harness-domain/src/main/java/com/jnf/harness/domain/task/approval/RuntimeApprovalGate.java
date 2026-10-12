@@ -38,6 +38,15 @@ public class RuntimeApprovalGate implements ApprovalGate {
 
     @Override
     public boolean allow(String toolName, Map<String, Object> arguments) {
+        return allow(null, toolName, arguments);
+    }
+
+    /** P9：审批记录落真实 sessionId（context 为空回落配置会话）。 */
+    @Override
+    public boolean allow(com.jnf.harness.model.ToolRunContext context, String toolName,
+                         Map<String, Object> arguments) {
+        String effectiveSession = context != null && context.sessionId() != null
+                && !context.sessionId().isBlank() ? context.sessionId() : sessionId;
         if (mode == Mode.AUTO_APPROVE || !riskyTool.test(toolName) || service.sessionAllowed(toolName)) {
             return true;
         }
@@ -49,7 +58,7 @@ public class RuntimeApprovalGate implements ApprovalGate {
         } catch (Exception e) {
             argsJson = String.valueOf(arguments);
         }
-        PendingApproval pending = service.request(sessionId, toolName, argsJson);
+        PendingApproval pending = service.request(effectiveSession, toolName, argsJson);
         try {
             Verdict verdict = service.decision(pending.id()).get(timeoutSeconds, TimeUnit.SECONDS);
             return verdict == Verdict.ALLOW_ONCE || verdict == Verdict.ALLOW_SESSION;

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "settingsPage": {
+    "title": "沙箱与权限",
+    "description": "三档权限模式：只读（不限于工作区）/ 工作区内读写 / 完全权限。默认档对所有新会话生效，会话内可在输入框工具条切换。",
+    "sections": [
+      {
+        "title": "默认权限模式",
+        "fields": [
+          {
+            "key": "mode",
+            "label": "权限模式",
+            "type": "select",
+            "default": "WORKSPACE_WRITE",
+            "options": [
+              { "value": "READ_ONLY", "label": "只读（不限于工作区）" },
+              { "value": "WORKSPACE_WRITE", "label": "工作区内读写" },
+              { "value": "DANGER_FULL_ACCESS", "label": "完全权限" }
+            ],
+            "help": "只读拒写与命令；工作区内读写限制写路径与命令越逸；完全权限不做限制。"
+          }
+        ]
+      }
+    ],
+    "actions": [
+      { "label": "保存默认模式", "method": "POST", "path": "mode", "bodyFrom": "form" }
+    ]
+  }
+}

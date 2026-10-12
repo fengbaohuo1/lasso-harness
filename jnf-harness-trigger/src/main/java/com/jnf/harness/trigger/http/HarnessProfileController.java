@@ -48,6 +48,9 @@ public class HarnessProfileController {
             AgentProfile updated = new AgentProfile(
                     profileCode,
                     str(body, "displayName", base.displayName()),
+                    str(body, "description", base.description()),
+                    str(body, "modelCode", base.modelCode()),
+                    str(body, "reasoningEffort", base.reasoningEffort()),
                     integer(body, "maxStepsPerTurn", base.maxStepsPerTurn()),
                     integer(body, "maxTokenContinuations", base.maxTokenContinuations()),
                     longValue(body, "contextTokenBudget", base.contextTokenBudget()),

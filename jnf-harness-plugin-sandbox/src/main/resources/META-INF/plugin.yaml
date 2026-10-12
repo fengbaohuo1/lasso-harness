@@ -1,0 +1,9 @@
+id: sandbox
+name: 沙箱
+version: 0.1.0
+author: jnf
+description: 三档权限模式（只读 / 工作区内读写 / 完全权限）的运行期强制与管理
+entrypoint: com.jnf.harness.plugin.sandbox.SandboxPlugin
+sdkVersion: 1
+toolNamespace: plugin
+ui: META-INF/plugin-ui.json

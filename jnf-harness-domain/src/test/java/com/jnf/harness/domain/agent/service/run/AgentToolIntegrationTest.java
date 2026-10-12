@@ -52,10 +52,12 @@ class AgentToolIntegrationTest {
 
         PersistingSessionLog session = new PersistingSessionLog("s-1", new SessionLog(), null);
         ReactLoopAgent agent = new ReactLoopAgent("agent-1", session, llm,
-                (hint, profile) -> AgentOptions.of("m", LlmChannel.openai("http://127.0.0.1:1", "k")),
+                (hint, profile, thinking) -> AgentOptions.of("m", LlmChannel.openai("http://127.0.0.1:1", "k")),
                 executor, profile -> List.of(Map.of("name", "fs_write", "description", "写文件",
                         "parameters", Map.of("type", "object"))),
-                new SystemPromptAssembler(), new BasicCompactionEngine(events -> "摘要"), null);
+                new SystemPromptAssembler(), new BasicCompactionEngine(events -> "摘要"), null,
+                // P9-1：会话工作区根解析（工具 cwd 按会话注入）
+                sessionId -> tempDir.toString());
 
         Inbox.TurnSummary summary = agent.ask("写个文件").get(10, TimeUnit.SECONDS);
 

@@ -37,12 +37,20 @@ public class ToolHookRegistry implements ToolLifecycleHook {
 
     @Override
     public PluginHookResult beforeToolUse(String toolName, Map<String, Object> arguments) {
+        return beforeToolUse(null, toolName, arguments);
+    }
+
+    @Override
+    public PluginHookResult beforeToolUse(com.jnf.harness.model.ToolRunContext context,
+                                          String toolName, Map<String, Object> arguments) {
         for (Registration registration : registrations) {
             if (!PRE_TOOL_USE.equals(registration.hookPoint())) {
                 continue;
             }
             try {
-                PluginHookResult verdict = registration.hook().evaluate(toolName, arguments);
+                PluginHookResult verdict = context == null
+                        ? registration.hook().evaluate(toolName, arguments)
+                        : registration.hook().evaluate(context, toolName, arguments);
                 if (verdict != null && verdict.intercepted()) {
                     return verdict;
                 }
@@ -55,12 +63,22 @@ public class ToolHookRegistry implements ToolLifecycleHook {
 
     @Override
     public void afterToolUse(String toolName, Map<String, Object> arguments, ToolExecutionResult result) {
+        afterToolUse(null, toolName, arguments, result);
+    }
+
+    @Override
+    public void afterToolUse(com.jnf.harness.model.ToolRunContext context, String toolName,
+                             Map<String, Object> arguments, ToolExecutionResult result) {
         for (Registration registration : registrations) {
             if (!POST_TOOL_USE.equals(registration.hookPoint())) {
                 continue;
             }
             try {
-                registration.hook().evaluate(toolName, arguments);
+                if (context == null) {
+                    registration.hook().evaluate(toolName, arguments);
+                } else {
+                    registration.hook().evaluate(context, toolName, arguments);
+                }
             } catch (Exception e) {
                 log.warn("POST_TOOL_USE Hook 异常（忽略）: {}", e.getMessage());
             }
