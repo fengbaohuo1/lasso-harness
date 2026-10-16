@@ -25,7 +25,24 @@ public sealed interface SessionEvent
     record StepEnd(long turn, long step) implements SessionEvent {
     }
 
-    record UserMessage(long turn, long step, String text) implements SessionEvent {
+    /**
+     * 用户消息（P11-4：可带图片附件引用；纯图片消息 text 为空串）。
+     */
+    record UserMessage(long turn, long step, String text,
+                       List<com.jnf.harness.model.ImageAttachmentRef> attachments) implements SessionEvent {
+
+        public UserMessage {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+        }
+
+        /** 兼容旧构造面（纯文本消息）。 */
+        public UserMessage(long turn, long step, String text) {
+            this(turn, step, text, List.of());
+        }
+
+        public boolean hasAttachments() {
+            return !attachments.isEmpty();
+        }
     }
 
     /** 文本流增量（仅 UI 呈现用；重放以 AssistantMessage 为准）。 */
@@ -51,7 +68,17 @@ public sealed interface SessionEvent
     record Compacted(String summary, List<Long> sourceSeqs) implements SessionEvent {
     }
 
-    /** 每次 LLM 调用的 token 用量（R11 计量落事件，重启后仍可聚合）。 */
-    record Usage(long turn, long step, long promptTokens, long completionTokens) implements SessionEvent {
+    /**
+     * 每次 LLM 调用的 token 用量（R11 计量落事件，重启后仍可聚合）。
+     * <p>P11-5：补采 {@code cachedTokens}（提示词缓存命中）与 {@code elapsedMs}（本次调用墙钟耗时），
+     * 让前端能显示缓存命中率与输出速度。
+     */
+    record Usage(long turn, long step, long promptTokens, long completionTokens,
+                 long cachedTokens, long elapsedMs) implements SessionEvent {
+
+        /** 兼容旧构造面（无缓存/耗时统计）。 */
+        public Usage(long turn, long step, long promptTokens, long completionTokens) {
+            this(turn, step, promptTokens, completionTokens, 0L, 0L);
+        }
     }
 }

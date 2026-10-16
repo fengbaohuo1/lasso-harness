@@ -31,15 +31,33 @@ public class OpenAiCompatibleAdapter implements LlmAdapter {
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
+    private final com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore;
 
     public OpenAiCompatibleAdapter() {
         this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
-                Duration.ofSeconds(120));
+                Duration.ofSeconds(120), null);
+    }
+
+    /** P11-4：带附件库的构造面——图片块经它还原成 data URI 后进 parts 数组。 */
+    public OpenAiCompatibleAdapter(com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore) {
+        this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
+                Duration.ofSeconds(120), attachmentStore);
     }
 
     public OpenAiCompatibleAdapter(HttpClient httpClient, Duration requestTimeout) {
+        this(httpClient, requestTimeout, null);
+    }
+
+    public OpenAiCompatibleAdapter(HttpClient httpClient, Duration requestTimeout,
+                                   com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore) {
         this.httpClient = httpClient;
         this.requestTimeout = requestTimeout;
+        this.attachmentStore = attachmentStore;
+    }
+
+    /** 附件引用 → data URI；无附件库时返回 null（图片块被丢弃）。 */
+    private String toDataUri(com.jnf.harness.model.ImageAttachmentRef ref) {
+        return attachmentStore == null ? null : attachmentStore.toDataUri(ref.mediaType(), ref.dataRef());
     }
 
     @Override
@@ -116,8 +134,14 @@ public class OpenAiCompatibleAdapter implements LlmAdapter {
                 }
                 JsonNode usageNode = root.path("usage");
                 if (!usageNode.isMissingNode() && !usageNode.isNull()) {
+                    // P11-5：缓存命中量口径——OpenAI 系在 prompt_tokens_details.cached_tokens，
+                    // DeepSeek 另给 prompt_cache_hit_tokens；两者取其一（有前者用前者）
+                    int cached = usageNode.path("prompt_tokens_details").path("cached_tokens").asInt(0);
+                    if (cached == 0) {
+                        cached = usageNode.path("prompt_cache_hit_tokens").asInt(0);
+                    }
                     usage = new TokenUsage(usageNode.path("prompt_tokens").asInt(0),
-                            usageNode.path("completion_tokens").asInt(0));
+                            usageNode.path("completion_tokens").asInt(0), cached);
                 }
             }
             emitter.next(new StreamChunk.DoneChunk(
@@ -139,7 +163,7 @@ public class OpenAiCompatibleAdapter implements LlmAdapter {
     private String buildBody(GenerateOptions options) throws IOException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", options.model());
-        body.put("messages", OpenAiMessageMapper.toOpenAiMessages(options.messages()));
+        body.put("messages", OpenAiMessageMapper.toOpenAiMessages(options.messages(), this::toDataUri));
         body.put("stream", true);
         body.put("stream_options", Map.of("include_usage", true));
         if (!options.toolSchemas().isEmpty()) {

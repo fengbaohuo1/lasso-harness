@@ -136,9 +136,17 @@ public class ReactLoopAgent {
     /** 提交一条用户消息（F2/A1/P9-8：可带 per-message 模型/预设/思考强度提示）。 */
     public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, String profileHint,
                                                     String thinkingHint, AgentEventListener listener) {
+        return ask(text, modelHint, profileHint, thinkingHint, List.of(), listener);
+    }
+
+    /** 提交一条用户消息（P11-4：可带图片附件引用）。 */
+    public CompletableFuture<Inbox.TurnSummary> ask(String text, String modelHint, String profileHint,
+                                                    String thinkingHint,
+                                                    List<com.jnf.harness.model.ImageAttachmentRef> attachments,
+                                                    AgentEventListener listener) {
         Inbox.PendingMessage message =
                 new Inbox.PendingMessage(text, modelHint, profileHint, thinkingHint,
-                        new CompletableFuture<>(), listener);
+                        new CompletableFuture<>(), listener, attachments);
         inbox.add(message);
         if (started.compareAndSet(false, true)) {
             driver.submit(this::driverLoop);
@@ -237,7 +245,8 @@ public class ReactLoopAgent {
 
         long step = 0;
         for (Inbox.PendingMessage message : claimed) {
-            session.append(new SessionEvent.UserMessage(turn, 1, message.text()));
+            // P11-4：附件引用随用户消息落事件（内容在附件库，事件里只有引用）
+            session.append(new SessionEvent.UserMessage(turn, 1, message.text(), message.attachments()));
         }
 
         int tokenContinuations = 0;
@@ -261,7 +270,9 @@ public class ReactLoopAgent {
                 phase = new Phase.Running(turnAbort, turn, step);
                 session.append(new SessionEvent.StepStart(turn, step));
 
+                long callStartedAt = System.currentTimeMillis();
                 BlockAssembler.GenerationResult result = generate(turn, step, events);
+                long callElapsedMs = System.currentTimeMillis() - callStartedAt;
 
                 session.append(new SessionEvent.StepEnd(turn, step));
                 if (abort.get() || turnAbort.get()) {
@@ -269,10 +280,13 @@ public class ReactLoopAgent {
                     endReason = TurnEndReason.ABORTED;
                     break;
                 }
-                meter.record(result.usage());
-                // R11：token 用量落事件（重启后仍可按会话聚合出用量）
+                meter.record(result.usage(), callElapsedMs);
+                // R11/P11-5：token 用量（含缓存命中与本次耗时）落事件，重启后仍可按会话聚合出用量与速度
                 session.append(new SessionEvent.Usage(turn, step,
-                        result.usage().promptTokens(), result.usage().completionTokens()));
+                        result.usage().promptTokens(), result.usage().completionTokens(),
+                        result.usage().cachedTokens(), callElapsedMs));
+                // P11-5：把累计用量推给流式监听（前端据此实时显示 tok/s 与缓存命中率）
+                events.onUsage(meter.report());
 
                 if (result.finishReason() == FinishReason.LENGTH
                         && tokenContinuations < options().maxTokenContinuations()) {

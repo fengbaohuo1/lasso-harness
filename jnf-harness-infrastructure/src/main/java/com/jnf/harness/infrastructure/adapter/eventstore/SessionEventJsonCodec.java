@@ -49,6 +49,15 @@ public final class SessionEventJsonCodec {
             root.put("turn", e.turn());
             root.put("step", e.step());
             root.put("text", e.text());
+            // P11-4：附件只落引用（内容在附件库），避免 JSONL 被 base64 撑爆
+            if (e.hasAttachments()) {
+                ArrayNode attachments = root.putArray("attachments");
+                for (com.jnf.harness.model.ImageAttachmentRef ref : e.attachments()) {
+                    ObjectNode item = attachments.addObject();
+                    item.put("mediaType", ref.mediaType());
+                    item.put("dataRef", ref.dataRef());
+                }
+            }
         } else if (event instanceof SessionEvent.AssistantChunk e) {
             root.put("type", "assistant_chunk");
             root.put("turn", e.turn());
@@ -90,6 +99,9 @@ public final class SessionEventJsonCodec {
             root.put("step", e.step());
             root.put("promptTokens", e.promptTokens());
             root.put("completionTokens", e.completionTokens());
+            // P11-5：缓存命中量与耗时（老日志无此二字段，解码时缺省 0）
+            root.put("cachedTokens", e.cachedTokens());
+            root.put("elapsedMs", e.elapsedMs());
         }
         return MAPPER.writeValueAsString(root);
     }
@@ -106,7 +118,8 @@ public final class SessionEventJsonCodec {
             case "step_start" -> new SessionEvent.StepStart(root.path("turn").asLong(), root.path("step").asLong());
             case "step_end" -> new SessionEvent.StepEnd(root.path("turn").asLong(), root.path("step").asLong());
             case "user_message" -> new SessionEvent.UserMessage(
-                    root.path("turn").asLong(), root.path("step").asLong(), root.path("text").asText(""));
+                    root.path("turn").asLong(), root.path("step").asLong(), root.path("text").asText(""),
+                    toAttachments(root.path("attachments")));
             case "assistant_chunk" -> new SessionEvent.AssistantChunk(
                     root.path("turn").asLong(), root.path("step").asLong(), root.path("text").asText(""));
             case "reasoning_chunk" -> new SessionEvent.ReasoningChunk(
@@ -128,7 +141,8 @@ public final class SessionEventJsonCodec {
             }
             case "usage" -> new SessionEvent.Usage(
                     root.path("turn").asLong(), root.path("step").asLong(),
-                    root.path("promptTokens").asLong(), root.path("completionTokens").asLong());
+                    root.path("promptTokens").asLong(), root.path("completionTokens").asLong(),
+                    root.path("cachedTokens").asLong(0L), root.path("elapsedMs").asLong(0L));
             default -> throw new IllegalStateException("未知事件类型: " + type);
         };
         return new SessionEventEntry(seq, event);
@@ -142,5 +156,21 @@ public final class SessionEventJsonCodec {
         node.fields().forEachRemaining(e -> map.put(e.getKey(), e.getValue().isNumber()
                 ? e.getValue().numberValue() : e.getValue().asText()));
         return map;
+    }
+
+    /** P11-4：附件引用数组反序列化（老日志无该字段 → 空列表）。 */
+    private static List<com.jnf.harness.model.ImageAttachmentRef> toAttachments(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return List.of();
+        }
+        List<com.jnf.harness.model.ImageAttachmentRef> refs = new ArrayList<>();
+        for (JsonNode item : node) {
+            String mediaType = item.path("mediaType").asText("");
+            String dataRef = item.path("dataRef").asText("");
+            if (!mediaType.isBlank() && !dataRef.isBlank()) {
+                refs.add(new com.jnf.harness.model.ImageAttachmentRef(mediaType, dataRef));
+            }
+        }
+        return refs;
     }
 }

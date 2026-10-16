@@ -12,6 +12,7 @@ import com.jnf.harness.domain.agent.model.AgentOptions;
 import com.jnf.harness.domain.agent.service.run.AgentRunFactory;
 import com.jnf.harness.domain.llm.adapter.port.ILlmRuntimePort;
 import com.jnf.harness.domain.llm.model.valobj.LlmChannel;
+import com.jnf.harness.domain.runtime.attachment.IAttachmentStore;
 import com.jnf.harness.domain.session.event.ISessionEventStore;
 import com.jnf.harness.domain.tool.service.ToolCallExecutor;
 import com.jnf.harness.domain.tool.service.DefaultToolRunContext;
@@ -47,9 +48,11 @@ import java.util.Map;
 public class HarnessConfiguration {
 
     @Bean
-    public ILlmRuntimePort llmRuntimePort() {
+    public ILlmRuntimePort llmRuntimePort(IAttachmentStore attachmentStore) {
         return new LlmRuntimeGateway(List.of(
-                new OpenAiCompatibleAdapter(), new AnthropicAdapter(), new OllamaAdapter()), 3);
+                new OpenAiCompatibleAdapter(attachmentStore),
+                new AnthropicAdapter(attachmentStore),
+                new OllamaAdapter(attachmentStore)), 3);
     }
 
     @Bean
@@ -496,6 +499,13 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public IAttachmentStore attachmentStore(
+            @Value("${harness.attachments.dir:./data/attachments}") String dir) {
+        // P11-4：图片附件落盘（事件里只留引用，JSONL 不被 base64 撑爆）
+        return new com.jnf.harness.infrastructure.adapter.attachment.FileAttachmentStore(Path.of(dir));
+    }
+
+    @Bean
     public com.jnf.harness.domain.runtime.secret.SecretRefResolver secretRefResolver(
             com.jnf.harness.domain.runtime.secret.ISecretStore store) {
         return new com.jnf.harness.domain.runtime.secret.SecretRefResolver(store);
@@ -509,14 +519,29 @@ public class HarnessConfiguration {
     }
 
     @Bean
+    public com.jnf.harness.domain.runtime.setting.IModelRepository modelRepository(
+            com.jnf.harness.infrastructure.dao.ModelDao dao) {
+        return new com.jnf.harness.infrastructure.adapter.setting.ModelRepository(dao);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.runtime.setting.ModelService modelService(
+            com.jnf.harness.domain.runtime.setting.IModelRepository repository,
+            com.jnf.harness.domain.runtime.setting.IModelSettingRepository channelRepository) {
+        // P11-1：渠道下的模型清单（harness_model 子表），渠道表 model_code 为「默认模型」镜像
+        return new com.jnf.harness.domain.runtime.setting.ModelService(repository, channelRepository);
+    }
+
+    @Bean
     public com.jnf.harness.app.boot.ModelSettingBootSeed modelSettingBootSeed(
             com.jnf.harness.domain.runtime.setting.ModelSettingService service,
+            com.jnf.harness.domain.runtime.setting.ModelService models,
             @Value("${harness.llm.default.base-url:}") String baseUrl,
             @Value("${harness.llm.default.api-key:}") String apiKey,
             @Value("${harness.llm.default.model:}") String model,
             @Value("${harness.llm.seed-default-channel:true}") boolean seedEnabled) {
         // M2：首启 seed（渠道表空时把文件配置落成 default 渠道；测试可关）
-        return new com.jnf.harness.app.boot.ModelSettingBootSeed(service, baseUrl, apiKey, model, seedEnabled);
+        return new com.jnf.harness.app.boot.ModelSettingBootSeed(service, models, baseUrl, apiKey, model, seedEnabled);
     }
 
     @Bean
@@ -550,6 +575,7 @@ public class HarnessConfiguration {
                                            CompactionEngine compactionEngine,
                                            com.jnf.harness.domain.runtime.tool.IToolCatalogPort toolCatalogPort,
                                            com.jnf.harness.domain.runtime.setting.ModelSettingService modelSettingService,
+                                           com.jnf.harness.domain.runtime.setting.ModelService modelService,
                                            com.jnf.harness.domain.agent.profile.AgentProfileService profileService,
                                            com.jnf.harness.domain.runtime.workspace.WorkspaceService workspaceService,
                                            @Value("${harness.llm.default.base-url}") String baseUrl,
@@ -560,58 +586,60 @@ public class HarnessConfiguration {
         // 冻结快照会让插件工具永远不进模型工具表）
         java.util.function.Function<String, List<Map<String, Object>>> schemasSupplier =
                 toolProfile -> buildSchemas(toolCatalogPort, toolRegistry, toolProfile);
-        // F2/A1/P9-7/P9-8：模型 + 预设 + 思考强度解析——per-message 模型提示优先（命中 modelCode 的
-        // 渠道整渠道切换；未命中作模型名覆盖在生效渠道上；无提示回落预设的模型偏好）；
+        // F2/A1/P9-7/P9-8/P11-6：模型 + 预设 + 思考强度解析。
+        // 模型提示（会话选择器的值）优先于预设，形态既可能是「渠道::模型」精确引用，也可能是裸模型码；
+        // 命中 harness_model 则整渠道切换并按官方规格定上下文预算/输出上限，未命中回落生效渠道；
         // 思考强度提示优先于预设；预设旋钮/工具画像/提示词补丁按 profile 提示裁
         com.jnf.harness.domain.agent.model.AgentOptionsResolver optionsResolver =
                 (hint, profileHint, thinkingHint) -> {
             com.jnf.harness.domain.agent.profile.AgentProfile profile = profileService.resolve(profileHint);
             String effectiveHint = (hint != null && !hint.isBlank()) ? hint : profile.modelCode();
+
+            com.jnf.harness.domain.runtime.setting.ModelEntity spec =
+                    modelService.resolve(effectiveHint).orElse(null);
+            com.jnf.harness.domain.runtime.setting.ModelSettingEntity selected = null;
+            if (spec != null) {
+                selected = modelSettingService.list().stream()
+                        .filter(item -> item.channelCode().equals(spec.channelCode()))
+                        .findFirst()
+                        .orElse(null);
+            }
+            if (selected == null) {
+                selected = modelSettingService.active().orElse(null);
+            }
             String modelCode;
             LlmChannel channel;
-            if (effectiveHint != null && !effectiveHint.isBlank()) {
-                var byModel = modelSettingService.list().stream()
-                        .filter(m -> hint.equals(m.modelCode()))
-                        .findFirst();
-                if (byModel.isPresent()) {
-                    var setting = byModel.get();
-                    modelCode = setting.modelCode();
-                    channel = new LlmChannel(setting.baseUrl(),
-                            modelSettingService.secrets().resolve(setting.apiKeyRef()),
-                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol()));
-                } else {
-                    var active = modelSettingService.active();
-                    if (active.isPresent()) {
-                        var setting = active.get();
-                        modelCode = effectiveHint;
-                        channel = new LlmChannel(setting.baseUrl(),
-                                modelSettingService.secrets().resolve(setting.apiKeyRef()),
-                                com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol()));
-                    } else {
-                        modelCode = effectiveHint;
-                        channel = LlmChannel.openai(baseUrl, apiKey);
-                    }
-                }
+            if (selected != null) {
+                modelCode = spec != null ? spec.modelCode()
+                        : (effectiveHint != null && !effectiveHint.isBlank()
+                                ? effectiveHint : selected.modelCode());
+                channel = new LlmChannel(selected.baseUrl(),
+                        modelSettingService.secrets().resolve(selected.apiKeyRef()),
+                        com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(selected.protocol()));
             } else {
-                var active = modelSettingService.active();
-                if (active.isPresent()) {
-                    var setting = active.get();
-                    modelCode = setting.modelCode();
-                    channel = new LlmChannel(setting.baseUrl(),
-                            modelSettingService.secrets().resolve(setting.apiKeyRef()),
-                            com.jnf.harness.domain.llm.model.valobj.LlmProtocol.from(setting.protocol()));
-                } else {
-                    modelCode = model;
-                    channel = LlmChannel.openai(baseUrl, apiKey);
-                }
+                modelCode = effectiveHint != null && !effectiveHint.isBlank() ? effectiveHint : model;
+                channel = LlmChannel.openai(baseUrl, apiKey);
+            }
+            // P11-6：上下文预算取「预设策略上限」与「模型官方窗口」的较小值；
+            // 输出上限同理，预设未配则直接用模型规格（适配器的协议兜底不再被硬编码值占位）
+            long contextBudget = profile.contextTokenBudget();
+            long compactionThreshold = profile.compactionThresholdTokens();
+            Integer maxTokens = profile.maxTokens();
+            if (spec != null) {
+                long contextWindow = spec.effectiveContextWindow();
+                contextBudget = Math.min(contextBudget, contextWindow);
+                compactionThreshold = Math.min(compactionThreshold,
+                        Math.max(1_000L, (long) (contextBudget * 0.8)));
+                int ceiling = spec.effectiveMaxOutputTokens();
+                maxTokens = maxTokens == null ? ceiling : Math.min(maxTokens, ceiling);
             }
             // P9-8：思考强度——per-message 提示优先于预设（空=不传，由供应商默认）
             String reasoningEffort = (thinkingHint != null && !thinkingHint.isBlank())
                     ? thinkingHint : profile.reasoningEffort();
             return new AgentOptions(modelCode, channel,
                     profile.maxStepsPerTurn(), profile.maxTokenContinuations(),
-                    profile.contextTokenBudget(), profile.keepRecentMessages(),
-                    profile.compactionThresholdTokens(), profile.maxTokens(), profile.temperature(),
+                    contextBudget, profile.keepRecentMessages(),
+                    compactionThreshold, maxTokens, profile.temperature(),
                     profile.toolProfile(), profile.promptExtra(), reasoningEffort);
         };
         return new AgentRunFactory(llmRuntimePort, toolRunner, optionsResolver,

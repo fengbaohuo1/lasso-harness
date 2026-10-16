@@ -14,6 +14,32 @@ CREATE TABLE IF NOT EXISTS harness_model_setting (
     updated_at    TIMESTAMP(3)
 );
 
+-- P11-1 模型条目子表：渠道下可挂多个模型；上下文窗口/最大输出/输入输出模态归属模型而非渠道。
+CREATE TABLE IF NOT EXISTS harness_model (
+    channel_code      VARCHAR(64)  NOT NULL,
+    model_code        VARCHAR(128) NOT NULL,
+    display_name      VARCHAR(128),
+    context_window    INT,
+    max_output_tokens INT,
+    input_modalities  VARCHAR(64)  NOT NULL DEFAULT 'text',
+    output_modalities VARCHAR(64)  NOT NULL DEFAULT 'text',
+    enabled           BOOLEAN      NOT NULL DEFAULT TRUE,
+    is_default        BOOLEAN      NOT NULL DEFAULT FALSE,
+    sort_order        INT          NOT NULL DEFAULT 0,
+    updated_at        TIMESTAMP(3),
+    PRIMARY KEY (channel_code, model_code)
+);
+CREATE INDEX IF NOT EXISTS idx_harness_model_channel ON harness_model (channel_code, sort_order);
+
+-- P11-1 老库自愈：把渠道表的 model_code 回填成一条模型行（幂等；渠道无 model_code 时跳过）。
+-- 注：ModelService 删除模型时会把渠道默认模型顺延，因此已删除的行不会被这里复活。
+INSERT INTO harness_model (channel_code, model_code, display_name, enabled, is_default, sort_order)
+SELECT s.channel_code, s.model_code, s.display_name, s.enabled, TRUE, 0
+FROM harness_model_setting s
+WHERE s.model_code IS NOT NULL AND s.model_code <> ''
+  AND NOT EXISTS (SELECT 1 FROM harness_model m
+                  WHERE m.channel_code = s.channel_code AND m.model_code = s.model_code);
+
 CREATE TABLE IF NOT EXISTS harness_tool_catalog (
     tool_code         VARCHAR(64)  PRIMARY KEY,
     display_name      VARCHAR(128),

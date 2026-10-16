@@ -41,15 +41,28 @@ public class AnthropicAdapter implements LlmAdapter {
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
+    private final com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore;
 
     public AnthropicAdapter() {
         this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
-                Duration.ofSeconds(120));
+                Duration.ofSeconds(120), null);
+    }
+
+    /** P11-4：带附件库的构造面——图片块还原成 Anthropic image source（base64）。 */
+    public AnthropicAdapter(com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore) {
+        this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
+                Duration.ofSeconds(120), attachmentStore);
     }
 
     public AnthropicAdapter(HttpClient httpClient, Duration requestTimeout) {
+        this(httpClient, requestTimeout, null);
+    }
+
+    public AnthropicAdapter(HttpClient httpClient, Duration requestTimeout,
+                            com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore) {
         this.httpClient = httpClient;
         this.requestTimeout = requestTimeout;
+        this.attachmentStore = attachmentStore;
     }
 
     @Override
@@ -87,6 +100,7 @@ public class AnthropicAdapter implements LlmAdapter {
             FinishReason finishReason = null;
             int promptTokens = 0;
             int completionTokens = 0;
+            int cachedTokens = 0;
 
             for (String line : (Iterable<String>) response.body()::iterator) {
                 if (emitter.isDone()) {
@@ -102,8 +116,12 @@ public class AnthropicAdapter implements LlmAdapter {
                 JsonNode root = MAPPER.readTree(payload);
                 String type = root.path("type").asText("");
                 switch (type) {
-                    case "message_start" -> promptTokens = root.path("message").path("usage")
-                            .path("input_tokens").asInt(0);
+                    case "message_start" -> {
+                        JsonNode usage = root.path("message").path("usage");
+                        promptTokens = usage.path("input_tokens").asInt(0);
+                        // P11-5：Anthropic 的缓存命中写作 cache_read_input_tokens
+                        cachedTokens = usage.path("cache_read_input_tokens").asInt(0);
+                    }
                     case "content_block_start" -> {
                         int index = root.path("index").asInt(0);
                         JsonNode block = root.path("content_block");
@@ -148,7 +166,7 @@ public class AnthropicAdapter implements LlmAdapter {
             }
             emitter.next(new StreamChunk.DoneChunk(
                     finishReason == null ? FinishReason.STOP : finishReason,
-                    new TokenUsage(promptTokens, completionTokens)));
+                    new TokenUsage(promptTokens, completionTokens, cachedTokens)));
             emitter.complete();
         } catch (LlmException e) {
             emitter.error(e);
@@ -207,11 +225,18 @@ public class AnthropicAdapter implements LlmAdapter {
         List<Map<String, Object>> out = new ArrayList<>();
         List<Map<String, Object>> userContent = new ArrayList<>();
         List<Map<String, Object>> assistantContent = new ArrayList<>();
+        List<Map<String, Object>> imageContent = new ArrayList<>();
         StringBuilder text = new StringBuilder();
 
         for (ContentBlock block : message.blocks()) {
             if (block instanceof com.jnf.harness.model.TextBlock t) {
                 text.append(t.text());
+            } else if (block instanceof com.jnf.harness.model.ImageBlock image) {
+                // P11-4：Anthropic 的 content 本来就是数组，图片直接作为 image 块插入 user 消息
+                Map<String, Object> source = imageSource(image.ref());
+                if (source != null) {
+                    imageContent.add(Map.of("type", "image", "source", source));
+                }
             } else if (block instanceof ToolCallBlock call) {
                 Map<String, Object> toolUse = new LinkedHashMap<>();
                 toolUse.put("type", "tool_use");
@@ -242,11 +267,25 @@ public class AnthropicAdapter implements LlmAdapter {
         if (text.length() > 0) {
             content.add(Map.of("type", "text", "text", text.toString()));
         }
+        content.addAll(imageContent);
         content.addAll(message.source() == MessageSource.ASSISTANT ? assistantContent : List.of());
         if (!content.isEmpty()) {
             out.add(Map.of("role", role, "content", content));
         }
         return out;
+    }
+
+    /** 附件引用 → Anthropic image source（base64 + media_type）；读不到返回 null。 */
+    private Map<String, Object> imageSource(com.jnf.harness.model.ImageAttachmentRef ref) {
+        if (attachmentStore == null) {
+            return null;
+        }
+        java.util.Optional<byte[]> bytes = attachmentStore.read(ref.dataRef());
+        if (bytes.isEmpty()) {
+            return null;
+        }
+        return Map.of("type", "base64", "media_type", ref.mediaType(),
+                "data", java.util.Base64.getEncoder().encodeToString(bytes.get()));
     }
 
     private static LlmFailure mapHttpError(int status) {

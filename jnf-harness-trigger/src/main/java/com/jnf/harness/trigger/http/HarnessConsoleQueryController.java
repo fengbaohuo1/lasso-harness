@@ -41,6 +41,8 @@ public class HarnessConsoleQueryController {
     private final ISessionEventStore eventStore;
     private final SessionMetaService sessionMetaService;
     private final com.jnf.harness.domain.agent.service.compaction.CompactionEngine compactionEngine;
+    /** P11-5：上下文构成端点要按当前注册段算系统提示词占用。 */
+    private final com.jnf.harness.domain.agent.service.SystemPromptAssembler promptAssembler;
     private final Path eventsRoot;
     private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
             new com.fasterxml.jackson.databind.ObjectMapper();
@@ -48,11 +50,13 @@ public class HarnessConsoleQueryController {
     public HarnessConsoleQueryController(ISessionEventStore eventStore,
                                          SessionMetaService sessionMetaService,
                                          com.jnf.harness.domain.agent.service.compaction.CompactionEngine compactionEngine,
+                                         com.jnf.harness.domain.agent.service.SystemPromptAssembler promptAssembler,
                                          @org.springframework.beans.factory.annotation.Value(
                                                  "${harness.events.dir:./data/events}") String eventsRoot) {
         this.eventStore = eventStore;
         this.sessionMetaService = sessionMetaService;
         this.compactionEngine = compactionEngine;
+        this.promptAssembler = promptAssembler;
         this.eventsRoot = Path.of(eventsRoot);
     }
 
@@ -200,22 +204,31 @@ public class HarnessConsoleQueryController {
     }
 
     /** 会话 token 用量（F6：由 Usage 事件聚合，事件里没有 usage 时全 0）。
-     * <p>C3 状态栏扩展：steps/toolCalls/contextTokens/compactions 亦全部事件聚合（重启后仍准确）。 */
+     * <p>C3 状态栏扩展：steps/toolCalls/contextTokens/compactions 亦全部事件聚合（重启后仍准确）。
+     * <p>P11-5：补 cachedTokens/cacheHitRate/elapsedMs/tokensPerSecond。
+     * <p>注意区分两个「上下文」概念：{@code contextTokens} 是最近一次 LLM 调用的上下文占用估计，
+     * {@code contextUsedTokens} 才是"用户消息 + 系统提示词 + 压缩摘要"这种真实构成（见 /context）。 */
     @GetMapping("/sessions/{sessionId}/usage")
     public Response<Map<String, Object>> usage(@PathVariable String sessionId) {
         long promptTokens = 0;
         long completionTokens = 0;
+        long cachedTokens = 0;
         long turns = 0;
         long steps = 0;
         long toolCalls = 0;
         long compactions = 0;
         long contextTokens = 0;
+        long lastElapsedMs = 0;
+        long lastCompletionTokens = 0;
         for (SessionEventEntry entry : eventStore.load(sessionId)) {
             SessionEvent event = entry.event();
             if (event instanceof SessionEvent.Usage usage) {
                 promptTokens += usage.promptTokens();
                 completionTokens += usage.completionTokens();
+                cachedTokens += usage.cachedTokens();
                 contextTokens = usage.promptTokens(); // 最近一次 LLM 调用的上下文占用估计
+                lastElapsedMs = usage.elapsedMs();
+                lastCompletionTokens = usage.completionTokens();
             } else if (event instanceof SessionEvent.TurnStart) {
                 turns++;
             } else if (event instanceof SessionEvent.StepEnd) {
@@ -226,15 +239,89 @@ public class HarnessConsoleQueryController {
                 compactions++;
             }
         }
-        return Response.success(Map.of(
-                "promptTokens", promptTokens,
-                "completionTokens", completionTokens,
-                "totalTokens", promptTokens + completionTokens,
-                "turns", turns,
-                "steps", steps,
-                "toolCalls", toolCalls,
-                "contextTokens", contextTokens,
-                "compactions", compactions));
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("promptTokens", promptTokens);
+        body.put("completionTokens", completionTokens);
+        body.put("totalTokens", promptTokens + completionTokens);
+        body.put("cachedTokens", cachedTokens);
+        body.put("cacheHitRate", promptTokens <= 0 ? 0d : (double) cachedTokens / (double) promptTokens);
+        body.put("elapsedMs", lastElapsedMs);
+        // 速度按最近一次调用算（累计平均会被首轮冷启动摊平）
+        body.put("tokensPerSecond", lastElapsedMs <= 0 ? 0d
+                : lastCompletionTokens * 1000d / lastElapsedMs);
+        body.put("turns", turns);
+        body.put("steps", steps);
+        body.put("toolCalls", toolCalls);
+        body.put("contextTokens", contextTokens);
+        body.put("compactions", compactions);
+        return Response.success(body);
+    }
+
+    /**
+     * 上下文构成（P11-5）：把「本次请求真正送进模型的东西」拆开算清楚，
+     * 供前端上下文面板显示真实占比，而不是拿一个笼统的 contextTokens 顶账。
+     * <p>口径：system=系统提示词段（按当前注册段拼接后的字符估算）、summary=最近一次压缩摘要、
+     * messages=用户与助手可见文本、tools=工具 schema JSON、reasoning=思考文本；
+     * 估算一律沿用内核的 chars/4（与 ReactLoopAgent.estimateTokens 同口径）。
+     */
+    @GetMapping("/sessions/{sessionId}/context")
+    public Response<Map<String, Object>> context(@PathVariable String sessionId) {
+        List<SessionEventEntry> entries = eventStore.load(sessionId);
+        long userChars = 0;
+        long assistantChars = 0;
+        long reasoningChars = 0;
+        long toolResultChars = 0;
+        long summaryChars = 0;
+        List<Map<String, Object>> messages = new ArrayList<>();
+        for (SessionEventEntry entry : entries) {
+            SessionEvent event = entry.event();
+            if (event instanceof SessionEvent.UserMessage user) {
+                userChars += length(user.text());
+                messages.add(contextItem("user", user.turn(), user.step(), user.text()));
+            } else if (event instanceof SessionEvent.AssistantMessage assistant) {
+                assistantChars += length(assistant.text());
+                messages.add(contextItem("assistant", assistant.turn(), assistant.step(), assistant.text()));
+            } else if (event instanceof SessionEvent.ReasoningChunk reasoning) {
+                reasoningChars += length(reasoning.text());
+            } else if (event instanceof SessionEvent.ToolResult tool) {
+                toolResultChars += length(tool.content());
+            } else if (event instanceof SessionEvent.Compacted compacted) {
+                summaryChars = length(compacted.summary()); // 只认最近一次压缩的摘要
+            }
+        }
+        long systemChars = promptAssembler.assemble().length();
+        long estimate = (userChars + assistantChars + reasoningChars + toolResultChars + summaryChars
+                + systemChars) / 4;
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("estimatedTokens", estimate);
+        body.put("systemTokens", systemChars / 4);
+        body.put("summaryTokens", summaryChars / 4);
+        body.put("userTokens", userChars / 4);
+        body.put("assistantTokens", assistantChars / 4);
+        body.put("reasoningTokens", reasoningChars / 4);
+        body.put("toolResultTokens", toolResultChars / 4);
+        body.put("messages", messages);
+        return Response.success(body);
+    }
+
+    private static Map<String, Object> contextItem(String role, long turn, long step, String text) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("role", role);
+        item.put("turn", turn);
+        item.put("step", step);
+        item.put("chars", text == null ? 0 : text.length());
+        item.put("tokens", (text == null ? 0 : text.length()) / 4);
+        item.put("preview", text == null ? "" : abbreviate(text));
+        return item;
+    }
+
+    private static String abbreviate(String text) {
+        String flat = text.replace('\n', ' ').trim();
+        return flat.length() <= 80 ? flat : flat.substring(0, 80) + "…";
+    }
+
+    private static int length(String text) {
+        return text == null ? 0 : text.length();
     }
 
     /** 目录/文件时间：目录取创建时间（兜底最近修改），文件取最近修改；无文件返回 0。 */

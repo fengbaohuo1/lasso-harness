@@ -24,7 +24,11 @@ public class ModelSettingService {
         return save(entity, null);
     }
 
-    /** 保存（upsert）；apiKey 非空时写入密钥库并回填 {@code secret:apiKey.<channelCode>} 引用（值不落库）。 */
+    /**
+     * 保存（upsert）。
+     * <p>P11-3 密钥三分语义：{@code apiKey == null} → 不修改既有密钥；{@code apiKey} 为空串 →
+     * 清除密钥（{@code apiKeyRef} 置空）；非空 → 写入密钥库并回填 {@code secret:apiKey.<channelCode>}（值不落库）。
+     */
     public ModelSettingEntity save(ModelSettingEntity entity, String apiKey) {
         if (entity.channelCode() == null || entity.channelCode().isBlank()) {
             throw new IllegalArgumentException("channelCode 必填");
@@ -39,8 +43,13 @@ public class ModelSettingService {
         }
         String channelCode = entity.channelCode().trim();
         String apiKeyRef = entity.apiKeyRef();
-        if (apiKey != null && !apiKey.isBlank()) {
-            apiKeyRef = secrets.putSecret("apiKey." + channelCode, apiKey.trim());
+        if (apiKey != null) {
+            if (apiKey.isBlank()) {
+                secrets.deleteSecret("apiKey." + channelCode);
+                apiKeyRef = null;
+            } else {
+                apiKeyRef = secrets.putSecret("apiKey." + channelCode, apiKey.trim());
+            }
         }
         ModelSettingEntity normalized = new ModelSettingEntity(
                 channelCode, entity.displayName(), entity.providerCode(),

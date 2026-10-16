@@ -15,6 +15,7 @@ import com.jnf.harness.domain.agent.service.run.ReactLoopAgent;
 import com.jnf.harness.domain.session.event.TurnEndReason;
 import com.jnf.harness.model.ToolCallBlock;
 import com.jnf.harness.model.ToolExecutionResult;
+import com.jnf.harness.model.UsageReport;
 
 /**
  * Agent 用例：第 7 节起对话链走策略树（Resolve→Intent→Dispatch→Collect），对外签名不变。
@@ -88,6 +89,11 @@ public class AgentUseCaseImpl implements IAgentApi, IAgentStreamApi {
             @Override
             public void onToolResult(ToolCallBlock call, ToolExecutionResult result) {
                 sink.onToolResult(call.name(), call.callId(), result.content(), result.failed());
+            }
+
+            @Override
+            public void onUsage(UsageReport report) {
+                sink.onUsage(report);
             }
 
             @Override

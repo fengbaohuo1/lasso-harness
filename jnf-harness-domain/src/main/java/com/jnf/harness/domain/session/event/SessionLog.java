@@ -1,7 +1,10 @@
 package com.jnf.harness.domain.session.event;
 
+import com.jnf.harness.model.ContentBlock;
+import com.jnf.harness.model.ImageBlock;
 import com.jnf.harness.model.Message;
 import com.jnf.harness.model.MessageSource;
+import com.jnf.harness.model.TextBlock;
 import com.jnf.harness.model.ToolCallBlock;
 import com.jnf.harness.model.ToolResultBlock;
 
@@ -89,7 +92,7 @@ public class SessionLog {
     private List<Message> toMessages(SessionEvent event) {
         List<Message> out = new ArrayList<>(2);
         if (event instanceof SessionEvent.UserMessage user) {
-            out.add(Message.ofText(MessageSource.USER, user.text()));
+            out.add(userMessage(user));
         } else if (event instanceof SessionEvent.AssistantMessage assistant) {
             out.add(Message.ofText(MessageSource.ASSISTANT, assistant.text()));
         } else if (event instanceof SessionEvent.ToolCall call) {
@@ -105,5 +108,20 @@ public class SessionLog {
             out.add(block);
         }
         return out;
+    }
+
+    /** 用户消息投影（P11-4）：有附件时按「文本块 + 图片块」展开，否则保持单文本块。 */
+    private static Message userMessage(SessionEvent.UserMessage user) {
+        if (!user.hasAttachments()) {
+            return Message.ofText(MessageSource.USER, user.text());
+        }
+        List<ContentBlock> blocks = new ArrayList<>(user.attachments().size() + 1);
+        if (user.text() != null && !user.text().isBlank()) {
+            blocks.add(TextBlock.of(user.text()));
+        }
+        for (com.jnf.harness.model.ImageAttachmentRef ref : user.attachments()) {
+            blocks.add(ImageBlock.of(ref));
+        }
+        return new Message(MessageSource.USER, blocks);
     }
 }

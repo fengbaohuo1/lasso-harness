@@ -26,10 +26,11 @@ public class AgentDispatchNode extends AbstractStrategyRouter {
         AgentMessageCommand command = context.get("command", AgentMessageCommand.class);
         ReactLoopAgent agent = context.get("agent", ReactLoopAgent.class);
         AgentEventListener listener = context.get("listener", AgentEventListener.class);
-        // F2/A1/P9-8：per-message model + profile + thinking 透传（空=生效渠道/default 预设/预设强度）
-        CompletableFuture<Inbox.TurnSummary> future = listener == null
-                ? agent.ask(command.message(), command.model(), command.profile(), command.thinking(), null)
-                : agent.ask(command.message(), command.model(), command.profile(), command.thinking(), listener);
+        // F2/A1/P9-8/P11-4：per-message model + profile + thinking + 图片附件透传
+        // （空=生效渠道/default 预设/预设强度/无附件）
+        CompletableFuture<Inbox.TurnSummary> future = agent.ask(
+                command.message(), command.model(), command.profile(), command.thinking(),
+                command.attachments(), listener);
         context.put("future", future);
     }
 

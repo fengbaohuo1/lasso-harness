@@ -17,7 +17,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Flow;
 
@@ -30,15 +32,65 @@ public class OllamaAdapter implements LlmAdapter {
 
     private final HttpClient httpClient;
     private final Duration requestTimeout;
+    private final com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore;
 
     public OllamaAdapter() {
         this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
-                Duration.ofSeconds(300));
+                Duration.ofSeconds(300), null);
+    }
+
+    /** P11-4：带附件库的构造面——图片按 Ollama 原生 {@code message.images}（裸 base64）传送。 */
+    public OllamaAdapter(com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore) {
+        this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
+                Duration.ofSeconds(300), attachmentStore);
     }
 
     public OllamaAdapter(HttpClient httpClient, Duration requestTimeout) {
+        this(httpClient, requestTimeout, null);
+    }
+
+    public OllamaAdapter(HttpClient httpClient, Duration requestTimeout,
+                         com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore) {
         this.httpClient = httpClient;
         this.requestTimeout = requestTimeout;
+        this.attachmentStore = attachmentStore;
+    }
+
+    /**
+     * 消息装配：复用 OpenAI 映射器（role/tool_calls 一致），再把 parts 数组还原成 Ollama 形状
+     * （{@code content} 字符串 + {@code images} 裸 base64 数组）。
+     */
+    private List<Map<String, Object>> buildMessages(GenerateOptions options) {
+        List<Map<String, Object>> messages = OpenAiMessageMapper.toOpenAiMessages(
+                options.messages(), this::toDataUri);
+        for (Map<String, Object> message : messages) {
+            if (!(message.get("content") instanceof List<?> parts)) {
+                continue;
+            }
+            StringBuilder text = new StringBuilder();
+            List<String> images = new ArrayList<>();
+            for (Object part : parts) {
+                if (!(part instanceof Map<?, ?> map)) {
+                    continue;
+                }
+                if ("text".equals(map.get("type"))) {
+                    text.append(map.get("text"));
+                } else if ("image_url".equals(map.get("type")) && map.get("image_url") instanceof Map<?, ?> url) {
+                    String value = String.valueOf(url.get("url"));
+                    int comma = value.indexOf(',');
+                    images.add(comma > 0 ? value.substring(comma + 1) : value);
+                }
+            }
+            message.put("content", text.toString());
+            if (!images.isEmpty()) {
+                message.put("images", images);
+            }
+        }
+        return messages;
+    }
+
+    private String toDataUri(com.jnf.harness.model.ImageAttachmentRef ref) {
+        return attachmentStore == null ? null : attachmentStore.toDataUri(ref.mediaType(), ref.dataRef());
     }
 
     @Override
@@ -119,10 +171,14 @@ public class OllamaAdapter implements LlmAdapter {
     private String buildBody(GenerateOptions options) throws IOException {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", options.model());
-        body.put("messages", OpenAiMessageMapper.toOpenAiMessages(options.messages()));
+        body.put("messages", buildMessages(options));
         body.put("stream", true);
         if (!options.toolSchemas().isEmpty()) {
             body.put("tools", options.toolSchemas());
+        }
+        // P11-2：输出上限（Ollama 走 options.num_predict；此前完全不可控）
+        if (options.maxTokens() != null) {
+            body.put("options", Map.of("num_predict", options.maxTokens()));
         }
         // P9-8 思考强度：Ollama think 开关（off=false，其余=true）
         if (options.reasoningEffort() != null) {

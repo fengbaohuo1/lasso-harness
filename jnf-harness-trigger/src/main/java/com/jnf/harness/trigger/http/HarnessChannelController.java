@@ -36,14 +36,15 @@ public class HarnessChannelController {
     }
 
     /**
-     * 探测上游可用模型列表。
+     * 探测上游可用模型列表（P11-2：结果直接带官方规格与模态，前端可勾选批量添加）。
      * <p>入参：channelCode（引用既有渠道）或 baseUrl + apiKey（或 apiKeyRef 引用）/protocol。
      */
     @PostMapping("/settings/models/discover")
-    public Response<List<String>> discover(@RequestBody Map<String, Object> body) {
+    public Response<List<Map<String, Object>>> discover(@RequestBody Map<String, Object> body) {
         String baseUrl;
         String apiKey;
         String protocol;
+        String providerCode;
         String channelCode = body.get("channelCode") == null ? "" : String.valueOf(body.get("channelCode"));
         if (!channelCode.isBlank()) {
             ModelSettingEntity entity = modelSettings.list().stream()
@@ -53,6 +54,7 @@ public class HarnessChannelController {
             baseUrl = entity.baseUrl();
             apiKey = modelSettings.resolveApiKey(channelCode);
             protocol = entity.protocol();
+            providerCode = entity.providerCode();
         } else {
             Object rawBaseUrl = body.get("baseUrl");
             if (rawBaseUrl == null || String.valueOf(rawBaseUrl).isBlank()) {
@@ -65,9 +67,10 @@ public class HarnessChannelController {
                 Object ref = body.get("apiKeyRef");
                 apiKey = modelSettings.secrets().resolve(ref == null ? "" : String.valueOf(ref));
             }
+            providerCode = body.get("providerCode") == null ? "" : String.valueOf(body.get("providerCode"));
         }
         try {
-            return Response.success(discovery.discover(baseUrl, apiKey, protocol));
+            return Response.success(ModelSpecJson.ofAll(providerCode, discovery.discover(baseUrl, apiKey, protocol)));
         } catch (IllegalArgumentException e) {
             return Response.invalidArgument(e.getMessage());
         } catch (Exception e) {

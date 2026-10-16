@@ -12,15 +12,30 @@ import java.util.concurrent.CompletableFuture;
  */
 public class Inbox {
 
-    /** 待处理消息：文本 + 完成信号 + 可选流式监听（每问一监听）+ 可选模型/画像/思考强度提示（F2/A1/P9-8）。 */
+    /**
+     * 待处理消息：文本 + 完成信号 + 可选流式监听（每问一监听）+ 可选模型/画像/思考强度提示（F2/A1/P9-8）
+     * + 可选图片附件引用（P11-4，纯图片消息 text 为空串）。
+     */
     public record PendingMessage(String text, String modelHint, String profileHint, String thinkingHint,
                                  CompletableFuture<TurnSummary> future,
-                                 com.jnf.harness.domain.agent.service.run.AgentEventListener listener) {
+                                 com.jnf.harness.domain.agent.service.run.AgentEventListener listener,
+                                 List<com.jnf.harness.model.ImageAttachmentRef> attachments) {
+
+        public PendingMessage {
+            attachments = attachments == null ? List.of() : List.copyOf(attachments);
+        }
+
+        /** 兼容旧构造面（无附件）。 */
+        public PendingMessage(String text, String modelHint, String profileHint, String thinkingHint,
+                              CompletableFuture<TurnSummary> future,
+                              com.jnf.harness.domain.agent.service.run.AgentEventListener listener) {
+            this(text, modelHint, profileHint, thinkingHint, future, listener, List.of());
+        }
 
         /** 兼容旧构造面（无模型/画像/思考提示）。 */
         public PendingMessage(String text, CompletableFuture<TurnSummary> future,
                               com.jnf.harness.domain.agent.service.run.AgentEventListener listener) {
-            this(text, null, null, null, future, listener);
+            this(text, null, null, null, future, listener, List.of());
         }
     }
 

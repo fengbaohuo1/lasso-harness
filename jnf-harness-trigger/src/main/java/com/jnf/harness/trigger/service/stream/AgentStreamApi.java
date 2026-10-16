@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jnf.harness.api.IAgentStreamApi;
 import com.jnf.harness.api.dto.AgentMessageCommand;
 import com.jnf.harness.api.stream.AgentStreamSink;
+import com.jnf.harness.model.UsageReport;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.LinkedHashMap;
@@ -15,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * SSE 流式推送：把 case 层 sink 事件映射为 SSE 帧（meta/chunk/step_break/tool_result/finish/done/error）。
+ * SSE 流式推送：把 case 层 sink 事件映射为 SSE 帧（meta/chunk/thinking/step_break/tool_result/usage/finish/done/error）。
  * <p>工程细节：超时不限（SSE_TIMEOUT 0）；15s 注释帧心跳防代理/看门狗断流；终态后关闭。
  */
 public class AgentStreamApi {
@@ -42,6 +43,20 @@ public class AgentStreamApi {
         emitter.onTimeout(session::close);
         emitter.onError(e -> session.close());
         useCase.stream(command, session);
+        return emitter;
+    }
+
+    /**
+     * 入参校验失败：用同形状的 SSE 流把错误送回前端。
+     * <p>流式接口失败在握手之后，无法再改 HTTP 状态码，只能发一帧 error（前端已按该事件处理）。
+     */
+    public SseEmitter fail(String message) {
+        SseEmitter emitter = new SseEmitter(0L);
+        StreamSession session = new StreamSession(emitter);
+        emitter.onCompletion(session::close);
+        emitter.onTimeout(session::close);
+        emitter.onError(e -> session.close());
+        session.onError("INVALID_ARGUMENT", message);
         return emitter;
     }
 
@@ -96,6 +111,26 @@ public class AgentStreamApi {
         @Override
         public void onFinish(long turn) {
             send("finish", Map.of("turn", turn));
+        }
+
+        @Override
+        public void onUsage(UsageReport report) {
+            // P11-5：用量帧。累计量给状态栏，速度/耗时给「tok/s」显示，缓存命中率单独给口径
+            if (report == null) {
+                return;
+            }
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("promptTokens", report.promptTokens());
+            payload.put("completionTokens", report.completionTokens());
+            payload.put("totalTokens", report.totalTokens());
+            payload.put("cachedTokens", report.cachedTokens());
+            payload.put("cacheHitRate", report.cacheHitRate());
+            payload.put("llmCalls", report.llmCalls());
+            payload.put("elapsedMs", report.lastElapsedMs());
+            payload.put("tokensPerSecond", report.tokensPerSecond());
+            // 最近一次调用的输入 token 数 = 当前上下文占用（累计 promptTokens 会越滚越大，不能当占用看）
+            payload.put("lastPromptTokens", report.lastPromptTokens());
+            send("usage", payload);
         }
 
         @Override

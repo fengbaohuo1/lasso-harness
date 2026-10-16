@@ -56,4 +56,12 @@ public final class SecretRefResolver {
     public boolean hasSecret(String ref) {
         return !resolve(ref).isBlank();
     }
+
+    /** 删除密钥库中的值（P11-3：渠道密钥「清除」语义；不存在的 ID 静默）。 */
+    public void deleteSecret(String secretId) {
+        if (secretId == null || secretId.isBlank()) {
+            return;
+        }
+        store.delete(secretId.trim());
+    }
 }
