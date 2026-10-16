@@ -17,6 +17,7 @@ public record ChannelPreset(String providerCode, String displayName, String prot
                 new ChannelPreset("deepseek", "DeepSeek", "openai", "https://api.deepseek.com/v1", "deepseek-chat"),
                 new ChannelPreset("qwen", "通义千问", "openai", "https://dashscope.aliyuncs.com/compatible-mode/v1", "qwen-max"),
                 new ChannelPreset("zhipu", "智谱 GLM", "openai", "https://open.bigmodel.cn/api/paas/v4", "glm-4-plus"),
+                new ChannelPreset("xiaomi", "小米 MiMo", "openai", "https://api.xiaomimimo.com/v1", "mimo-v2.6-flash"),
                 new ChannelPreset("anthropic", "Anthropic Claude", "anthropic", "https://api.anthropic.com", "claude-sonnet-4-5"),
                 new ChannelPreset("moonshot", "Moonshot Kimi", "openai", "https://api.moonshot.cn/v1", "moonshot-v1-8k"),
                 new ChannelPreset("siliconflow", "硅基流动", "openai", "https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V3"),

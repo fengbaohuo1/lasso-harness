@@ -25,6 +25,7 @@ final class ModelSpecJson {
         item.put("inputModalities", spec.inputModalities());
         item.put("outputModalities", spec.outputModalities());
         item.put("known", spec.known());
+        item.put("chatModel", spec.chatModel());
         item.put("note", spec.note());
         return item;
     }
