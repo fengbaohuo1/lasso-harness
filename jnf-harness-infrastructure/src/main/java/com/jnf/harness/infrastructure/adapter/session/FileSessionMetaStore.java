@@ -9,6 +9,8 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -40,6 +42,28 @@ public class FileSessionMetaStore implements ISessionMetaStore {
         } catch (IOException e) {
             throw new UncheckedIOException("读取会话元数据失败: " + file, e);
         }
+    }
+
+    @Override
+    public List<SessionMeta> findAll() {
+        if (!Files.isDirectory(root)) {
+            return List.of();
+        }
+        List<SessionMeta> all = new ArrayList<>();
+        try (var dirs = Files.list(root)) {
+            for (Path dir : dirs.filter(Files::isDirectory).toList()) {
+                String sessionId = dir.getFileName().toString();
+                // 单个元数据损坏不应拖垮「列出全部」的调用方（删除工作区解绑）——跳过并继续
+                try {
+                    find(sessionId).ifPresent(all::add);
+                } catch (UncheckedIOException ignored) {
+                    // 跳过不可读条目
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("列举会话元数据失败: " + root, e);
+        }
+        return all;
     }
 
     @Override

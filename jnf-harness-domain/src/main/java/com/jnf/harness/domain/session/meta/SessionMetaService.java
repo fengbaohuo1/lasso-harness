@@ -65,6 +65,29 @@ public class SessionMetaService {
         return updated;
     }
 
+    /**
+     * 解绑某工作区下的全部会话（P10-6：工作区被删除时调用）。
+     * <p>不解绑会留下指向已删工作区的悬空码，会话列表据此分组就会出现「幽灵工作区」；
+     * 解绑后会话回落到 default 工作区（与 {@code WorkspaceService.cwdFor} 的回落语义一致）。
+     *
+     * @return 被解绑的会话数
+     */
+    public int clearWorkspace(String workspaceCode) {
+        String code = blankToNull(workspaceCode);
+        if (code == null) {
+            return 0;
+        }
+        int cleared = 0;
+        for (SessionMeta meta : store.findAll()) {
+            if (code.equals(meta.workspaceCode())) {
+                store.save(new SessionMeta(meta.sessionId(), meta.title(), meta.deleted(),
+                        System.currentTimeMillis(), null, meta.presetCode(), meta.reasoningEffort()));
+                cleared++;
+            }
+        }
+        return cleared;
+    }
+
     private static String blankToNull(String value) {
         String trimmed = value == null ? "" : value.trim();
         return trimmed.isEmpty() ? null : trimmed;

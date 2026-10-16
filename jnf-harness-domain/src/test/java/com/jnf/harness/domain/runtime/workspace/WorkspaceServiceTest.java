@@ -50,6 +50,11 @@ class WorkspaceServiceTest {
         }
 
         @Override
+        public List<SessionMeta> findAll() {
+            return List.copyOf(metaTable.values());
+        }
+
+        @Override
         public void save(SessionMeta meta) {
             metaTable.put(meta.sessionId(), meta);
         }
@@ -78,13 +83,36 @@ class WorkspaceServiceTest {
                 created.workspaceCode(), null, null));
         assertEquals(created.rootPath(), service.cwdFor("s-1"));
 
-        // 绑定的工作区被删 → 回落 default
-        service.delete(created.workspaceCode());
+        // 绑定的工作区被删 → 回落 default，且会话 meta 被解绑（P10-6：不留悬空码）
+        assertEquals(1, service.delete(created.workspaceCode()), "删除工作区应解绑 1 个会话");
         assertEquals(defaultRoot, service.cwdFor("s-1"));
+        assertEquals(null, metaTable.get("s-1").workspaceCode(), "会话不应残留已删工作区的码");
 
         // 更新改名
         WorkspaceEntry updated = service.update("default", "主工作区", null);
         assertEquals("主工作区", updated.displayName());
+    }
+
+    @Test
+    @DisplayName("目录浏览（P10-5）：列子目录、不可读路径不抛异常、盘根列表非空")
+    void browseDirectories() {
+        WorkspaceService.DirectoryListing listing = service.browse("target");
+        assertTrue(listing.error() == null, "target 目录应可读: " + listing.error());
+        assertTrue(listing.path().endsWith("target"));
+        assertTrue(listing.roots() != null && !listing.roots().isEmpty());
+
+        // 路径不存在但父目录在：回落到最近的已存在目录（用户手打半截路径时的友好行为）
+        WorkspaceService.DirectoryListing fallback = service.browse("target/no-such-child");
+        assertTrue(fallback.error() == null);
+        assertTrue(fallback.path().endsWith("target"));
+
+        // 父目录也不存在：不抛异常，error 有文案
+        WorkspaceService.DirectoryListing missing = service.browse("no-such-dir-xyz/deeper/leaf");
+        assertEquals("目录不存在", missing.error());
+
+        // 空路径：从用户主目录起
+        WorkspaceService.DirectoryListing home = service.browse(null);
+        assertTrue(home.path() != null && !home.path().isBlank());
     }
 
     @Test

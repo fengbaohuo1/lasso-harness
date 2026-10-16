@@ -57,13 +57,35 @@ public class HarnessWorkspaceController {
     }
 
     @DeleteMapping("/{workspaceCode}")
-    public Response<Void> delete(@PathVariable String workspaceCode) {
+    public Response<Map<String, Object>> delete(@PathVariable String workspaceCode) {
         try {
-            service.delete(workspaceCode);
-            return Response.success(null);
+            int unbound = service.delete(workspaceCode);
+            return Response.success(Map.of("workspaceCode", workspaceCode, "unboundSessions", unbound));
         } catch (IllegalArgumentException | IllegalStateException e) {
             return Response.invalidArgument(e.getMessage());
         }
+    }
+
+    /**
+     * 目录浏览（P10-5：新建/编辑工作区时挑根目录，免手打绝对路径）。
+     * <p>只列子目录；路径为空从用户主目录起；不可读路径不报错，在 error 字段里说明。
+     */
+    @GetMapping("/browse")
+    public Response<Map<String, Object>> browse(
+            @org.springframework.web.bind.annotation.RequestParam(value = "path", required = false) String path) {
+        WorkspaceService.DirectoryListing listing = service.browse(path);
+        Map<String, Object> json = new LinkedHashMap<>();
+        json.put("path", listing.path());
+        json.put("parent", listing.parent());
+        json.put("roots", listing.roots());
+        json.put("directories", listing.directories().stream().map(child -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("name", child.name());
+            item.put("path", child.path());
+            return item;
+        }).toList());
+        json.put("error", listing.error());
+        return Response.success(json);
     }
 
     /** 会话的工作区根（工具 cwd、沙箱工作区根的对外可见形态）。 */
