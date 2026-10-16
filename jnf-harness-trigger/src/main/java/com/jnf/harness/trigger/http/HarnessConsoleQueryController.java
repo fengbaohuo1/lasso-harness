@@ -8,7 +8,10 @@ import com.jnf.harness.domain.session.event.SessionLog;
 import com.jnf.harness.domain.session.meta.SessionMeta;
 import com.jnf.harness.domain.session.meta.SessionMetaService;
 import com.jnf.harness.model.ContentBlock;
+import com.jnf.harness.model.ImageAttachmentRef;
+import com.jnf.harness.model.ImageBlock;
 import com.jnf.harness.model.Message;
+import com.jnf.harness.model.MessageSource;
 import com.jnf.harness.model.ToolCallBlock;
 import com.jnf.harness.model.ToolResultBlock;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -43,6 +46,8 @@ public class HarnessConsoleQueryController {
     private final com.jnf.harness.domain.agent.service.compaction.CompactionEngine compactionEngine;
     /** P11-5：上下文构成端点要按当前注册段算系统提示词占用。 */
     private final com.jnf.harness.domain.agent.service.SystemPromptAssembler promptAssembler;
+    /** P11-14：回放用户消息里的图片附件（事件只存引用，需要还原成 data URI）。 */
+    private final com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore;
     private final Path eventsRoot;
     private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
             new com.fasterxml.jackson.databind.ObjectMapper();
@@ -51,12 +56,14 @@ public class HarnessConsoleQueryController {
                                          SessionMetaService sessionMetaService,
                                          com.jnf.harness.domain.agent.service.compaction.CompactionEngine compactionEngine,
                                          com.jnf.harness.domain.agent.service.SystemPromptAssembler promptAssembler,
+                                         com.jnf.harness.domain.runtime.attachment.IAttachmentStore attachmentStore,
                                          @org.springframework.beans.factory.annotation.Value(
                                                  "${harness.events.dir:./data/events}") String eventsRoot) {
         this.eventStore = eventStore;
         this.sessionMetaService = sessionMetaService;
         this.compactionEngine = compactionEngine;
         this.promptAssembler = promptAssembler;
+        this.attachmentStore = attachmentStore;
         this.eventsRoot = Path.of(eventsRoot);
     }
 
@@ -359,6 +366,25 @@ public class HarnessConsoleQueryController {
             }
         }
         json.put("blocks", blocks);
+        // P11-14：用户消息的图片附件。事件里只存 ImageAttachmentRef（避免 JSONL 日志被 base64 撑爆），
+        // 回放时经附件库还原成 data URI 才能在前端显示——不回传的话刷新后图片气泡是空的。
+        if (message.source() == MessageSource.USER) {
+            List<Map<String, Object>> attachments = new ArrayList<>();
+            for (ContentBlock block : message.blocks()) {
+                if (block instanceof ImageBlock image) {
+                    ImageAttachmentRef ref = image.ref();
+                    String dataUri = attachmentStore.toDataUri(ref.mediaType(), ref.dataRef());
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("mediaType", ref.mediaType());
+                    item.put("dataRef", ref.dataRef());
+                    item.put("data", dataUri == null ? "" : dataUri);
+                    attachments.add(item);
+                }
+            }
+            if (!attachments.isEmpty()) {
+                json.put("attachments", attachments);
+            }
+        }
         return json;
     }
 }
