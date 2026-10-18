@@ -1,8 +1,9 @@
-# jnf-harness
+# lasso-harness
 
-> jnf 的自有 Agent Harness——DDD 六边形 + ReAct 循环 + 会话事件溯源 + 三通道插件。
-> 施工计划与验收：`../plan/README.md`（总纲）与 `../plan/第一阶段-复刻dsh-java.md`（逐节明细）。
-> 参照实现：`../deepseek-harness-java`（架构与功能对齐对象；代码指代保留其原名以便查证）。
+> lasso 的自有 Agent Harness——DDD 六边形 + ReAct 循环 + 会话事件溯源 + 三通道插件。
+> 配套桌面壳：[lasso-harness-desktop](https://github.com/fengbaohuo1/lasso-harness-desktop)。
+>
+> **命名说明**：仓库对外名称为 `lasso-harness`；Maven 模块、Java 包名（`com.jnf.harness`）与构建产物仍沿用 `jnf-harness-*` 命名，与源码保持一致，下文命令均按实际模块名执行。
 
 ## 构建与运行
 
@@ -10,7 +11,7 @@
 mvn clean verify                                      # 构建 + 全部测试（含 ArchUnit 分层门禁）
 java -jar jnf-harness-app/target/jnf-harness-app.jar  # 启动（默认 H2 文件库 ./data/）
 node scripts/package-local.mjs                        # 本地免 Docker 部署包（dist/，多 jar 布局）
-docker build -t jnf-harness .                         # 容器镜像
+docker build -t lasso-harness .                       # 容器镜像
 ```
 
 **多 jar 交付（一切皆插件）**：内核 fat jar 不含任何插件；`jnf-harness-app/target/plugins/`
