@@ -27,6 +27,11 @@ harness:
       base-url: ${LLM_BASE_URL:http://127.0.0.1:8777/v1}
       api-key: ${LLM_API_KEY:}
       model: ${LLM_MODEL:default-model}
+  skills:
+    # 技能包（SKILL.md）：项目级 <cwd>/.jnf/skills 始终优先，其次 roots，最后 user-dir
+    roots: ${HARNESS_SKILLS_ROOTS:./skills}
+    user-dir: ${HARNESS_SKILLS_USER_DIR:}
+    state-file: ${HARNESS_SKILLS_STATE_FILE:./data/skills.properties}
 
 logging:
   level:

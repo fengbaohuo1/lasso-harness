@@ -56,6 +56,34 @@ docker build -t lasso-harness .                       # 容器镜像
 - **智能体画像**：per-agent 配置（步数/上下文预算/工具画像白名单/提示词补丁），消息级 `profile` 提示——token 开销按场景裁
 - **开放协议**：三张 Agent Card、A2A JSON-RPC、数字人注册表、协作房间（事件续传）
 - **周边**：goal/plan/todo、jobs/schedule（持久化）、workflow、terminal、扩展管理
+- **技能包（Skills）**：`SKILL.md` 指令包运行时——三级来源发现（项目级 `<cwd>/.jnf/skills` > `harness.skills.roots` > 用户级 `~/.jnf/skills`）、
+  渐进式披露（系统提示词只列名称+描述，正文由 `skill` 工具按需加载）、启用/禁用、Git/zip 安装、管理 REST 与桌面面板；
+  仓库自带 `skills/` 首批技能包（插件开发 / 运维 / 技能编写规范）
+
+## 技能包（Skills）
+
+技能包是一份带 YAML frontmatter 的 `SKILL.md`（格式兼容 dsh / Anthropic 生态），模型命中描述后用 `skill` 工具加载正文，
+按其中的步骤执行。发现优先级：**项目级** `<cwd>/.jnf/skills`（100）> **自定义根** `harness.skills.roots`（300，默认 `./skills`）
+> **用户级** `~/.jnf/skills`（400）> **内置** BUNDLED（600，预留）。同名技能取高优先级来源。
+
+```bash
+# 仓库自带三个技能包（作为自定义根被自动发现）
+ls skills/            # jnf-harness-plugin-dev / jnf-harness-ops / skill-authoring / _template
+
+# 管理 REST
+curl -s localhost:8090/api/harness/skills
+curl -s localhost:8090/api/harness/skills/jnf-harness-ops
+curl -s -X POST localhost:8090/api/harness/skills/install -H "Content-Type: application/json" \
+     -d '{"gitUrl":"https://github.com/your/skills.git","name":"my-skill"}'
+curl -s -X POST localhost:8090/api/harness/skills/jnf-harness-ops/disable
+```
+
+- **写一个新技能**：在 `skills/<kebab-name>/SKILL.md` 写 frontmatter（`name` 必须等于目录名、`description` ≤240 字、可选 `when_to_use`），
+  重启后新会话即可在系统提示词的 `## Skills` 段看到它。
+- **安装限**：Git URL 仅 http(s)/git@/ssh；克隆 `--depth 1` 120s 超时；≤500 文件 / 单文件 ≤8MB / 总 ≤32MB；zip ≤1000 条目/64MB；
+  拒符号链接；删除只允许用户级技能。技能正文属于**提示词注入面**，安装第三方技能前请先过目。
+- **配置**：`harness.skills.roots`（逗号分隔）、`harness.skills.user-dir`、`harness.skills.state-file`（默认 `./data/skills.properties`），
+  能力开关 `harness.capabilities.skill`。
 
 ## 配置
 
@@ -67,7 +95,10 @@ docker build -t lasso-harness .                       # 容器镜像
 | `harness.plugins.dir` | 插件目录（空=自动：内核 jar 同级 `plugins/` → `./plugins`） |
 | `harness.plugins.auto-load` | 插件目录自动装载：新 jar 自动登记+激活，停用的不复活（默认 true） |
 | `harness.events.dir` | 会话事件/元数据目录（默认 `./data/events`） |
-| `harness.capabilities.*` | 能力开关（task/goal/a2a/digital-human/collaboration/jobs/schedule/terminal/extension，默认全开）：关闭=工具不注册、专属服务与 REST 不装配 |
+| `harness.skills.roots` | 技能包自定义根目录（逗号分隔，默认 `./skills`；项目级 `<cwd>/.jnf/skills` 始终优先） |
+| `harness.skills.user-dir` | 用户级技能目录（默认 `~/.jnf/skills`；安装器只写这里） |
+| `harness.skills.state-file` | 技能启用态文件（默认 `./data/skills.properties`，只记 disabled 名单） |
+| `harness.capabilities.*` | 能力开关（task/goal/a2a/digital-human/collaboration/jobs/schedule/terminal/extension/skill，默认全开）：关闭=工具不注册、专属服务与 REST 不装配 |
 | `harness.approval.mode` | `REQUEST_APPROVAL`（默认）/ `AUTO_APPROVE` |
 | `harness.sandbox.mode` | `READ_ONLY` / `WORKSPACE_WRITE`（默认）/ `DANGER_FULL_ACCESS` |
 | `spring.datasource.url` | 默认 H2 文件库；MySQL 用环境变量覆盖 |

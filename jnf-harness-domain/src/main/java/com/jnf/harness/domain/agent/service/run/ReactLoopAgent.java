@@ -396,6 +396,11 @@ public class ReactLoopAgent {
         lastAssistant.append(text);
     }
 
+    /** 当前会话工作区根（工具 cwd 与动态提示词段落同源）。 */
+    private String currentCwd() {
+        return cwdResolver.apply(agentId);
+    }
+
     private ToolExecutionResult executeTool(ToolCallBlock call) {
         try {
             // P9-1：按会话注入真实 agentId/sessionId/cwd（工作区根即沙箱工作区）
@@ -481,7 +486,8 @@ public class ReactLoopAgent {
     /** 上下文预算裁剪：超出预算时保留最近 keepRecentMessages 条。 */
     private List<Message> buildMessages() {
         List<Message> derived = session.log().deriveMessages();
-        String systemPrompt = promptAssembler.assemble();
+        // 技能目录等动态段落按会话工作区现算（与工具 cwd 同源）
+        String systemPrompt = promptAssembler.assemble(currentCwd());
         // A1：画像提示词补丁（场景指令按画像注入）
         String promptExtra = options().promptExtra();
         if (promptExtra != null && !promptExtra.isBlank()) {

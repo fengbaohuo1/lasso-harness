@@ -9,51 +9,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 /**
- * 扩展管理服务（extension 域）：Skills / MCP Servers / CLI 配置统一管理。
+ * 扩展管理服务（extension 域）：MCP Servers / CLI 配置统一管理。
+ * <p>技能（Skills）已迁至 {@code com.jnf.harness.domain.skill} 域（真实 SKILL.md 文件系统运行时）。
  */
 public class ExtensionManagementService {
-
-    /** 技能记录。 */
-    public record SkillRecord(String name, boolean enabled, String source) {
-    }
 
     /** MCP server 记录。 */
     public record McpServerRecord(String name, List<String> command, boolean tested) {
     }
 
-    private final Map<String, SkillRecord> skills = new ConcurrentHashMap<>();
     private final Map<String, McpServerRecord> mcpServers = new ConcurrentHashMap<>();
     private final Map<String, String> cliConfig = new ConcurrentHashMap<>();
     private final Function<List<String>, IRemoteToolBridge> bridgeFactory;
 
     public ExtensionManagementService(Function<List<String>, IRemoteToolBridge> bridgeFactory) {
         this.bridgeFactory = bridgeFactory;
-    }
-
-    // ---- Skills ----
-
-    public SkillRecord installSkill(String name, String source) {
-        SkillRecord record = new SkillRecord(name, true, source == null ? "" : source);
-        skills.put(name, record);
-        return record;
-    }
-
-    public SkillRecord setSkillEnabled(String name, boolean enabled) {
-        SkillRecord record = skills.get(name);
-        if (record == null) {
-            throw new IllegalArgumentException("技能不存在: " + name);
-        }
-        SkillRecord updated = new SkillRecord(name, enabled, record.source());
-        skills.put(name, updated);
-        return updated;
-    }
-
-    public void removeSkill(String name) {
-        skills.remove(name);
-    }
-
-    public List<SkillRecord> listSkills() {
-        return new ArrayList<>(skills.values());
     }
 
     // ---- MCP Servers ----

@@ -107,6 +107,8 @@ public class HarnessConfiguration {
                                      com.jnf.harness.domain.schedule.ScheduleService scheduleService,
                                      com.jnf.harness.domain.terminal.TerminalService terminalService,
                                      com.jnf.harness.domain.extension.ExtensionManagementService extensionService,
+                                     com.jnf.harness.domain.skill.ISkillService skillService,
+                                     com.jnf.harness.domain.skill.SkillAdminService skillAdminService,
                                      org.springframework.core.env.Environment env) {
         // P2/A3：内核零内置工具——fs/shell/web 族官方插件 JAR；essentials 族（todo/plan/lsp/session_search）
         // 亦为插件；这里只留依赖领域服务的内核工具（A2 开关裁注册）
@@ -127,7 +129,12 @@ public class HarnessConfiguration {
             com.jnf.harness.domain.terminal.TerminalTools.all(terminalService).forEach(registry::register);
         }
         if (capability(env, "extension")) {
-            com.jnf.harness.domain.extension.ExtensionTools.all(extensionService).forEach(registry::register);
+            com.jnf.harness.domain.extension.ExtensionTools.all(extensionService, skillAdminService)
+                    .forEach(registry::register);
+        }
+        // 技能包：skill 工具按名按需加载 SKILL.md 正文（系统提示词里只放目录）
+        if (capability(env, "skill")) {
+            registry.register(new com.jnf.harness.domain.skill.SkillTool(skillService));
         }
         return registry;
     }
@@ -176,6 +183,68 @@ public class HarnessConfiguration {
         return new com.jnf.harness.domain.extension.ExtensionManagementService(
                 command -> new com.jnf.harness.infrastructure.adapter.plugin.JsonRpcStdioBridge(
                         Path.of(".").toAbsolutePath(), command));
+    }
+
+    // ---------------- 技能包（SKILL.md）运行时 ----------------
+
+    /** 技能启用态存储：只记录被禁用的技能名（默认全部启用）。 */
+    @Bean
+    public com.jnf.harness.domain.skill.ISkillStateStore skillStateStore(
+            @Value("${harness.skills.state-file:./data/skills.properties}") String stateFile) {
+        return new com.jnf.harness.infrastructure.adapter.skill.FileSkillStateStore(Path.of(stateFile));
+    }
+
+    /** 技能发现：项目级 &lt;cwd&gt;/.jnf/skills &gt; 配置 roots &gt; 用户级 ~/.jnf/skills。 */
+    @Bean
+    public com.jnf.harness.domain.skill.ISkillProviderPort skillProviderPort(
+            @Value("${harness.skills.user-dir:}") String configuredUserDir,
+            @Value("${harness.skills.roots:./skills}") String configuredRoots) {
+        return new com.jnf.harness.infrastructure.adapter.skill.FilesystemSkillProviderPort(
+                skillUserDir(configuredUserDir), skillCustomRoots(configuredRoots));
+    }
+
+    @Bean
+    public com.jnf.harness.domain.skill.ISkillService skillService(
+            com.jnf.harness.domain.skill.ISkillProviderPort skillProviderPort,
+            com.jnf.harness.domain.skill.ISkillStateStore skillStateStore) {
+        return new com.jnf.harness.domain.skill.SkillService(
+                List.of(skillProviderPort), skillStateStore);
+    }
+
+    @Bean
+    public com.jnf.harness.domain.skill.ISkillInstallerPort skillInstallerPort(
+            @Value("${harness.skills.user-dir:}") String configuredUserDir) {
+        return new com.jnf.harness.infrastructure.adapter.skill.GitSkillInstaller(
+                skillUserDir(configuredUserDir));
+    }
+
+    @Bean
+    public com.jnf.harness.domain.skill.SkillAdminService skillAdminService(
+            com.jnf.harness.domain.skill.ISkillService skillService,
+            com.jnf.harness.domain.skill.ISkillInstallerPort skillInstallerPort,
+            com.jnf.harness.domain.skill.ISkillStateStore skillStateStore) {
+        return new com.jnf.harness.domain.skill.SkillAdminService(
+                skillService, skillInstallerPort, skillStateStore);
+    }
+
+    static Path skillUserDir(String configured) {
+        return configured == null || configured.isBlank()
+                ? Path.of(System.getProperty("user.home"), ".jnf", "skills")
+                : Path.of(configured);
+    }
+
+    static List<Path> skillCustomRoots(String configured) {
+        List<Path> roots = new ArrayList<>();
+        if (configured == null) {
+            return roots;
+        }
+        for (String part : configured.split(",")) {
+            String trimmed = part.strip();
+            if (!trimmed.isEmpty()) {
+                roots.add(Path.of(trimmed));
+            }
+        }
+        return roots;
     }
 
     // ---------------- 第 13 节：开放协议与数字人 ----------------
@@ -450,10 +519,14 @@ public class HarnessConfiguration {
     }
 
     @Bean
-    public SystemPromptAssembler systemPromptAssembler() {
+    public SystemPromptAssembler systemPromptAssembler(
+            com.jnf.harness.domain.skill.ISkillService skillService) {
         SystemPromptAssembler assembler = new SystemPromptAssembler();
         assembler.registerSection(new SystemPromptAssembler.PromptSection("base", 0,
                 "你是 jnf-harness 智能体，通过工具调用完成用户的任务。"));
+        // 技能目录：只放名称+描述（渐进式披露），正文由 skill 工具按需加载；随会话 cwd 现算
+        assembler.registerDynamicSection(new SystemPromptAssembler.DynamicSection(
+                "skills", 15, skillService::catalog));
         return assembler;
     }
 

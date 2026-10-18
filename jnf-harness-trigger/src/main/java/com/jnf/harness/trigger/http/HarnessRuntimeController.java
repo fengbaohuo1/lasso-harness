@@ -2,6 +2,7 @@ package com.jnf.harness.trigger.http;
 
 import com.jnf.harness.api.response.Response;
 import com.jnf.harness.domain.extension.ExtensionManagementService;
+import com.jnf.harness.domain.skill.SkillAdminService;
 import com.jnf.harness.domain.terminal.TerminalService;
 import com.jnf.harness.domain.workflow.WorkflowService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -24,13 +26,16 @@ public class HarnessRuntimeController {
     private final WorkflowService workflowService;
     private final TerminalService terminalService;
     private final ExtensionManagementService extensionService;
+    private final SkillAdminService skillAdminService;
 
     public HarnessRuntimeController(WorkflowService workflowService,
                                     TerminalService terminalService,
-                                    ExtensionManagementService extensionService) {
+                                    ExtensionManagementService extensionService,
+                                    SkillAdminService skillAdminService) {
         this.workflowService = workflowService;
         this.terminalService = terminalService;
         this.extensionService = extensionService;
+        this.skillAdminService = skillAdminService;
     }
 
     // ---- workflow ----
@@ -76,8 +81,9 @@ public class HarnessRuntimeController {
 
     @GetMapping("/extensions")
     public Response<Map<String, Object>> extensions() {
+        String workdir = Path.of("").toAbsolutePath().toString();
         return Response.success(Map.of(
-                "skills", extensionService.listSkills(),
+                "skills", skillAdminService.list(workdir),
                 "mcpServers", extensionService.listMcpServers(),
                 "cli", extensionService.cliConfig()));
     }

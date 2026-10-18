@@ -25,7 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 第 12b 批验收：workflow / terminal / extension / session_search。
  */
 @SpringBootTest(classes = JnfHarnessApplication.class,
-        properties = {"spring.datasource.url=jdbc:h2:mem:rtbtest;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1"})
+        properties = {"spring.datasource.url=jdbc:h2:mem:rtbtest;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1",
+                "harness.skills.state-file=target/test-skills.properties",
+                "harness.skills.user-dir=target/test-skills",
+                "harness.skills.roots="})
 @Import(AgentApiIntegrationTest.FakeLlmConfiguration.class)
 class RuntimeCapabilitiesBatchBTest {
 
@@ -95,13 +98,17 @@ class RuntimeCapabilitiesBatchBTest {
     }
 
     @Test
-    @DisplayName("extension：技能安装/启停 + CLI 配置；session_search 跨会话命中")
+    @DisplayName("extension：MCP/CLI 配置 + skill 工具接线；session_search 跨会话命中")
     void extension_and_session_search() throws Exception {
-        extensionService.installSkill("demo-skill", "git://demo");
-        extensionService.setSkillEnabled("demo-skill", false);
-        assertEquals(1, extensionService.listSkills().size());
+        extensionService.addMcpServer("demo-mcp", List.of("echo", "hi"));
+        assertEquals(1, extensionService.listMcpServers().size());
+        extensionService.removeMcpServer("demo-mcp");
         extensionService.setCli("editor", "idea");
         assertEquals("idea", extensionService.cliConfig().get("editor"));
+
+        // 技能运行时接线：extension_skills 与 skill 工具都应注册
+        assertTrue(toolRegistry.lookup("extension_skills").isPresent());
+        assertTrue(toolRegistry.lookup("skill").isPresent());
 
         eventStore.append("searchable-session", new SessionEventEntry(1,
                 new SessionEvent.UserMessage(1, 1, "独特的搜索关键词xyz")));
