@@ -8,14 +8,14 @@
     <groupId>com.jnf.harness</groupId>
     <artifactId>jnf-harness</artifactId>
     <version>0.1.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
   </parent>
 
-  <artifactId>jnf-harness-plugin-fs</artifactId>
-  <name>jnf-harness-plugin-fs</name>
-  <description>官方文件工具插件（P2）：fs_read/fs_write/fs_search/fs_grep/fs_read_image/str_replace_editor，独立 JAR 交付、plugins/ 目录动态加载</description>
+  <artifactId>jnf-harness-plugin-shell</artifactId>
+  <name>jnf-harness-plugin-shell</name>
+  <description>官方 shell 工具插件（P2）：shell_execute，经宿主服务 spi.host.ShellService 受治理执行（R2 命令守卫在宿主侧）</description>
 
   <dependencies>
-    <!-- 插件只依赖 SDK（jnf-harness-types），provided：宿主提供运行时，不打进插件 JAR -->
     <dependency>
       <groupId>com.jnf.harness</groupId>
       <artifactId>jnf-harness-types</artifactId>

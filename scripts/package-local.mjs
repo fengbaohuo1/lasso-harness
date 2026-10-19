@@ -16,7 +16,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const jar = path.join(root, 'jnf-harness-app', 'target', 'jnf-harness-app.jar');
 const pluginsOut = path.join(root, 'jnf-harness-app', 'target', 'plugins');
 const sdkJar = path.join(root, 'jnf-harness-types', 'target');
-const sampleJar = path.join(root, 'jnf-harness-sample-plugin', 'target');
+const sampleJar = path.join(root, 'plugins', 'sample', 'target');
 const dist = path.join(root, 'dist', 'jnf-harness-local');
 
 console.log('[package] 构建后端 …');

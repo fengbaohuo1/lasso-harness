@@ -4,8 +4,10 @@ target/
 .vscode/
 data/
 logs/
-plugins/
 *.log
+
+# 运行期插件目录（构建产物在 jnf-harness-app/target/plugins，已由 target/ 覆盖）
+/plugins/*.jar
 
 # 测试运行期在模块根写入的临时文件（ApprovalRunner/工具测试产物）
 jnf-harness-app/approved.txt

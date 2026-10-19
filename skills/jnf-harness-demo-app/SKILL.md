@@ -46,10 +46,10 @@ metadata:
 
 ## 3. 生成插件工程
 
-以 `jnf-harness/jnf-harness-sample-plugin/` 为模板复制改造（比从零写快），生成物放**仓库外**的工作区目录，避免污染内核仓库：
+以 `jnf-harness/plugins/sample/` 为模板复制改造（比从零写快）。演示插件按**第三方独立工程**处理，放仓库外的工作区目录：
 
 ```
-<workspace>/demo-plugins/<pluginId>/
+<workspace>/plugins/<pluginId>/
 ├─ pom.xml                                   # artifactId=<pluginId>；parent 用 relativePath ../../jnf-harness/pom.xml
 └─ src/main/
    ├─ java/com/jnf/harness/demo/<pkg>/<PluginClass>.java
@@ -59,6 +59,8 @@ metadata:
       └─ services/com.jnf.harness.spi.JavaHarnessPlugin   # 内容=实现类全限定名
 ```
 
+- **不加入** jnf-harness 的 Maven reactor（根 `pom.xml` 不登记）；只有确定要随宿主发布的官方插件，才移入
+  `jnf-harness/plugins/<短名>/` 并加进根 `<modules>`；
 - 依赖：`jnf-harness-types`（`scope=provided`）+ `slf4j-api`（provided）；SDK 版本 `SdkVersion.CURRENT=1`；
 - 若生成器选择把工程放在别处（无 `jnf-harness` 同级），则**去掉 parent**，给 `jnf-harness-types` 显式写
   `<version>0.1.0-SNAPSHOT</version>`，slf4j-api 用 2.0.x，二者均 `provided`；
@@ -128,12 +130,15 @@ blocks 类型：`kv` / `table`（需 `columns:[{key,label}]`）/ `code`（`langu
 # 首次：把 SDK 装进本地仓库（插件 provided 依赖解析用）
 cd jnf-harness && mvn -o -B -pl jnf-harness-types -am install -DskipTests
 
-# 构建插件（在 <workspace>/demo-plugins/<pluginId>）
+# 构建插件（在 <workspace>/plugins/<pluginId>）
 mvn -o -B -DskipTests package
 
-# 放进插件目录（宿主的“jar 同级 plugins/”；命令行启动即 jnf-harness-app/target/plugins）
+# 放进宿主插件目录（宿主的“jar 同级 plugins/”；命令行启动即 jnf-harness-app/target/plugins）
 cp target/<pluginId>-*.jar <workspace>/jnf-harness/jnf-harness-app/target/plugins/
 ```
+
+桌面端随包：先执行上面的宿主构建（或 `npm run agent:build`），把 jar 放进 `jnf-harness-app/target/plugins/` 后，
+在 `jnf-desktop` 执行 `npm run agent:copy`（会把该目录所有 jar 复制进 `resources/agent/plugins/`），再 `npm run build` 打包。
 
 ```bash
 # 目录扫描 → 安装 → 激活（agent 用 curl/shell 工具执行）

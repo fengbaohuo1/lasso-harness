@@ -18,7 +18,9 @@ metadata:
 - Java 17、Spring Boot 3.3.5、Maven 聚合工程；插件是**独立 JAR**，不必成为宿主的 Maven 子模块。
 - 插件只依赖 SDK 模块 `jnf-harness-types`（`scope=provided`），不要把它打进插件 JAR；宿主内核 fat jar **不含**插件，官方插件放 `jnf-harness-app/target/plugins/`，启动时自动装载。
 - SDK 版本：`com.jnf.harness.spi.SdkVersion.CURRENT = 1`；清单 `sdkVersion` 高于 1 会被拒绝加载。
-- 参考实现（最佳模板）：`jnf-harness-sample-plugin/src/main/java/com/jnf/harness/sample/SampleToolsPlugin.java` 与 `jnf-harness-sample-plugin/src/main/resources/META-INF/`。
+- 参考实现（最佳模板）：`plugins/sample/src/main/java/com/jnf/harness/sample/SampleToolsPlugin.java` 与 `plugins/sample/src/main/resources/META-INF/`。
+- 工程位置：**官方插件**模块统一放 `plugins/<短名>/`（如 `plugins/fs`），`artifactId` 用 `jnf-harness-plugin-<名>`，并加入根 `pom.xml` 的 `<modules>`；
+  **第三方/演示插件**保持独立工程（放仓库外），只依赖 `jnf-harness-types`，构建后把 jar 放进宿主插件目录即可。
 
 ## 1. SDK 位置（先读这些类）
 

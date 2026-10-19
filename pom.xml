@@ -24,13 +24,13 @@
     <module>jnf-harness-domain</module>
     <module>jnf-harness-infrastructure</module>
     <module>jnf-harness-trigger</module>
-    <module>jnf-harness-sample-plugin</module>
-    <module>jnf-harness-plugin-fs</module>
-    <module>jnf-harness-plugin-shell</module>
-    <module>jnf-harness-plugin-web</module>
-    <module>jnf-harness-plugin-essentials</module>
-    <module>jnf-harness-plugin-subagent</module>
-    <module>jnf-harness-plugin-sandbox</module>
+    <module>plugins/sample</module>
+    <module>plugins/fs</module>
+    <module>plugins/shell</module>
+    <module>plugins/web</module>
+    <module>plugins/essentials</module>
+    <module>plugins/subagent</module>
+    <module>plugins/sandbox</module>
     <module>jnf-harness-app</module>
   </modules>
 

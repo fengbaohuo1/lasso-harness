@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         properties = {"spring.datasource.url=jdbc:h2:mem:sampletest;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE;DB_CLOSE_DELAY=-1"})
 class SamplePluginJarIntegrationTest {
 
-    static final Path SAMPLE_JAR = Path.of("..", "jnf-harness-sample-plugin", "target",
+    static final Path SAMPLE_JAR = Path.of("..", "plugins", "sample", "target",
             "jnf-harness-sample-plugin-0.1.0-SNAPSHOT.jar");
 
     static boolean sampleJarBuilt() {

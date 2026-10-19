@@ -39,6 +39,10 @@ docker build -t lasso-harness .                       # 容器镜像
 | jnf-harness-sample-plugin | 示例插件 JAR（前后端全栈模板：五注册口 + UI 清单 + 插件端点） |
 | jnf-harness-app | Spring Boot 启动器 + Web 控制台 + schema + 组合根 |
 
+**目录约定**：7 个插件模块统一放在 `plugins/` 下（`plugins/{fs,shell,web,essentials,subagent,sandbox,sample}`），
+目录名为短名、Maven `artifactId` 保持 `jnf-harness-plugin-*` / `jnf-harness-sample-plugin` 不变；内核模块仍在仓库根目录。
+第三方/演示插件按**独立工程**放在仓库外，构建后 jar 装配到 `plugins/` 运行目录（详见技能 `jnf-harness-plugin-dev`）。
+
 ## 能力面
 
 - **Agent**：ReAct 循环（工具续步/步数上限/受控续写/协作取消）、上下文预算与压缩、token 计量

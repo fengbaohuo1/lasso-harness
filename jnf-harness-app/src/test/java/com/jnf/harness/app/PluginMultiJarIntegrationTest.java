@@ -36,7 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PluginMultiJarIntegrationTest {
 
     private static final Path SAMPLE_JAR = Path.of(
-            "../jnf-harness-sample-plugin/target/jnf-harness-sample-plugin-0.1.0-SNAPSHOT.jar");
+            "../plugins/sample/target/jnf-harness-sample-plugin-0.1.0-SNAPSHOT.jar");
 
     @Autowired
     PluginBootActivator bootActivator;

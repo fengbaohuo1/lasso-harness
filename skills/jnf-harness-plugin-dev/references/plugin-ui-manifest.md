@@ -1,7 +1,7 @@
 # 插件 UI 清单（META-INF/plugin-ui.json）
 
 可选能力：声明后桌面前端会渲染工具卡片、插件独立设置页、斜杠命令与 `@` 提及源。
-参考实现：`jnf-harness-sample-plugin/src/main/resources/META-INF/plugin-ui.json`；宿主读取逻辑见 `jnf-harness-trigger/src/main/java/com/jnf/harness/trigger/http/HarnessPluginController.java` 的 `contributions`。
+参考实现：`plugins/sample/src/main/resources/META-INF/plugin-ui.json`；宿主读取逻辑见 `jnf-harness-trigger/src/main/java/com/jnf/harness/trigger/http/HarnessPluginController.java` 的 `contributions`。
 
 ## 与插件的关系
 
