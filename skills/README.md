@@ -17,17 +17,27 @@ skills/
 │       └── common-errors.md
 ├── jnf-harness-ops/
 │   └── SKILL.md
+├── jnf-harness-demo-app/
+│   ├── SKILL.md
+│   └── references/
+│       ├── case-redis-monitor.md
+│       ├── case-release-monitor.md
+│       └── case-dev-collab.md
 └── skill-authoring/
     └── SKILL.md
 ```
 
-## 三个技能
+## 四个技能
 
 | 技能 | 定位 | 典型触发 |
 | --- | --- | --- |
 | `jnf-harness-plugin-dev` | 给 jnf-harness **写 Java 插件**：SPI 选型、工具注册、`plugin.yaml`、Hook/`Endpoint`/配置、打包与安装 | “写一个插件”“注册新工具”“plugin.yaml 怎么写”“插件热重载” |
 | `jnf-harness-ops` | 本地**构建、启动与运维**：端口/鉴权/模型渠道/数据目录/技能与插件目录/故障排查 | “启动失败”“端口占用”“401”“配置模型渠道”“data 在哪” |
+| `jnf-harness-demo-app` | 把**一句话业务需求**做成可点击插件应用：需求深挖卡 → 工具契约 → `plugin-ui.json` → 打包安装激活 → 验收；含 Redis 监控 / 发布监控 / 迭代协作 3 个即用案例 | “做一个 XX 管理台/监控台/工作台”“按 P28 做一个” |
 | `skill-authoring` | **写合规技能包**：frontmatter、命名、描述、渐进式披露、references/scripts、自检清单 | “新增一个技能”“技能没被发现”“技能怎么写” |
+
+> `jnf-harness-demo-app` 的 3 个案例是**演示应用**（预置数据、不接真实系统），设计卡在 `references/case-*.md`；
+> 生成物建议放仓库外的 `demo-plugins/<pluginId>/`，构建后把 jar 放进宿主插件目录。
 
 ## 发现与优先级
 

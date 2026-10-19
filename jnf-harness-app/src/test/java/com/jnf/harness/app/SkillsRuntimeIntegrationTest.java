@@ -57,6 +57,7 @@ class SkillsRuntimeIntegrationTest {
         List<String> names = skills.stream().map(SkillSummary::name).toList();
         assertTrue(names.contains("jnf-harness-plugin-dev"), names.toString());
         assertTrue(names.contains("jnf-harness-ops"), names.toString());
+        assertTrue(names.contains("jnf-harness-demo-app"), names.toString());
         assertTrue(names.contains("skill-authoring"), names.toString());
         assertTrue(skills.stream().allMatch(SkillSummary::enabled), names.toString());
         assertTrue(skills.stream().allMatch(s -> !s.description().isBlank()), skills.toString());
@@ -76,5 +77,21 @@ class SkillsRuntimeIntegrationTest {
                 .execute(Map.of("name", "no-such-skill"), ctx).get();
         assertTrue(missing.failed());
         assertTrue(missing.content().contains("jnf-harness-plugin-dev"), missing.content());
+    }
+
+    @Test
+    @DisplayName("演示应用技能：正文可加载并引用 3 个案例设计卡")
+    void loads_demo_app_skill_with_case_references() throws Exception {
+        ToolExecutionResult loaded = toolRegistry.lookup("skill").orElseThrow()
+                .execute(Map.of("name", "jnf-harness-demo-app"), ctx).get();
+        assertTrue(loaded.success(), loaded.content());
+        assertTrue(loaded.content().contains("<skill name=\"jnf-harness-demo-app\""), loaded.content());
+        assertTrue(loaded.content().contains("case-redis-monitor.md"), loaded.content());
+        assertTrue(loaded.content().contains("case-release-monitor.md"), loaded.content());
+        assertTrue(loaded.content().contains("case-dev-collab.md"), loaded.content());
+        // 案例设计卡真实存在于技能目录（正文引用可被 fs 工具读到）
+        assertTrue(java.nio.file.Files.isRegularFile(
+                java.nio.file.Path.of("../skills/jnf-harness-demo-app/references/case-redis-monitor.md")),
+                "case-redis-monitor.md 应存在");
     }
 }

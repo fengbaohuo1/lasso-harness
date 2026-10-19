@@ -58,7 +58,7 @@ docker build -t lasso-harness .                       # 容器镜像
 - **周边**：goal/plan/todo、jobs/schedule（持久化）、workflow、terminal、扩展管理
 - **技能包（Skills）**：`SKILL.md` 指令包运行时——三级来源发现（项目级 `<cwd>/.jnf/skills` > `harness.skills.roots` > 用户级 `~/.jnf/skills`）、
   渐进式披露（系统提示词只列名称+描述，正文由 `skill` 工具按需加载）、启用/禁用、Git/zip 安装、管理 REST 与桌面面板；
-  仓库自带 `skills/` 首批技能包（插件开发 / 运维 / 技能编写规范）
+  仓库自带 `skills/` 技能包（插件开发 / 运维 / 演示应用生成 / 技能编写规范）
 
 ## 技能包（Skills）
 
@@ -67,8 +67,8 @@ docker build -t lasso-harness .                       # 容器镜像
 > **用户级** `~/.jnf/skills`（400）> **内置** BUNDLED（600，预留）。同名技能取高优先级来源。
 
 ```bash
-# 仓库自带三个技能包（作为自定义根被自动发现）
-ls skills/            # jnf-harness-plugin-dev / jnf-harness-ops / skill-authoring / _template
+# 仓库自带四个技能包（作为自定义根被自动发现）
+ls skills/            # plugin-dev / ops / demo-app（含 3 个案例）/ skill-authoring / _template
 
 # 管理 REST
 curl -s localhost:8090/api/harness/skills
@@ -79,7 +79,7 @@ curl -s -X POST localhost:8090/api/harness/skills/jnf-harness-ops/disable
 ```
 
 - **写一个新技能**：在 `skills/<kebab-name>/SKILL.md` 写 frontmatter（`name` 必须等于目录名、`description` ≤240 字、可选 `when_to_use`），
-  重启后新会话即可在系统提示词的 `## Skills` 段看到它。
+  下一次请求（新会话或新回合）即可在系统提示词的 `## Skills` 段看到它，**无需重启**。
 - **安装限**：Git URL 仅 http(s)/git@/ssh；克隆 `--depth 1` 120s 超时；≤500 文件 / 单文件 ≤8MB / 总 ≤32MB；zip ≤1000 条目/64MB；
   拒符号链接；删除只允许用户级技能。技能正文属于**提示词注入面**，安装第三方技能前请先过目。
 - **配置**：`harness.skills.roots`（逗号分隔）、`harness.skills.user-dir`、`harness.skills.state-file`（默认 `./data/skills.properties`），

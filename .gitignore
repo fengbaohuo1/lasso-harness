@@ -6,3 +6,8 @@ data/
 logs/
 plugins/
 *.log
+
+# 测试运行期在模块根写入的临时文件（ApprovalRunner/工具测试产物）
+jnf-harness-app/approved.txt
+jnf-harness-domain/x.txt
+jnf-harness-domain/z.txt
