@@ -296,7 +296,17 @@ public void configure(PluginContext context) {
 - [ ] `pluginId()` 与清单 id 一致；入口类有无参构造
 - [ ] `configure` 里先 `super.configure(context)`；注册项都可回收
 - [ ] 工具 name 裸名唯一；参数 schema 完整；失败走 `fail(...)`
-- [ ] JAR 里无 `jnf-harness-types` / SLF4J 实现；`jar tf` 检查 `META-INF/plugin.yaml`
+- [ ] JAR 里无 `jnf-harness-types` / SLF4J 实现；**插件自有依赖（JDBC 驱动等）用 shade 打进 JAR**；`jar tf` 检查 `META-INF/plugin.yaml`
 - [ ] `GET /api/harness/plugins` 状态 ACTIVE、`/contributions` 能看到工具
 - [ ] 让模型调用一次限定名工具；停用后再查工具已消失
+
+## 9. 第三方插件实战要点（2026-10，db-manager 验证）
+
+- **依赖隔离**：宿主 ClassLoader 只给 SDK + 日志门面，插件自己的库（JDBC 驱动、模板引擎等）不会共享；用 `maven-shade-plugin` 打成胖 JAR（`ServicesResourceTransformer` 保留 `META-INF/services`），否则运行期 `NoClassDefFoundError`。
+- **工具命名空间**：默认限定名 `plugin__<id>__<tool>`；想让工具以裸名注册（与技能文案/`plugin-ui.json`/斜杠模板一致）时，在 `plugin.yaml` 加 `toolNamespace: global`，并自行保证全局唯一。
+- **插件数据目录**：宿主不提供“插件数据目录”，相对路径取决于宿主进程 cwd。用配置项（如 `dataDir`，默认 `~/.<plugin>`）+ 绝对路径，别写死相对路径。
+- **配置即已生效**：设置页字段保存到插件配置 KV，`getConfig` 每次读取，改完无需重启插件；密码字段仍以明文存 KV，务必在 help 里提示风险。
+- **无需模型的验收通道**：注册一个 `POST selftest` 端点，内部直接执行各工具并返回结果；排障时先打它，再看 `/contributions`。
+- **激活幂等**：目录自动装载的插件启动即 ACTIVE；REST `activate` 对已激活插件幂等（可安全重试），所以上线脚本不必先判断状态。
+- **UI 能力边界**：桌面端只渲染工具卡（table/kv/code/text/actions）+ 配置表单 + 斜杠命令 + `@` 提及，没有自定义页面/面板；复杂管理台要拆成“多个工具卡”或等底座支持自定义页面贡献。
 - [ ] 配置项缺省值可用，PUT 后行为变化

@@ -104,6 +104,9 @@ class PluginMultiJarIntegrationTest {
 
         // 显式激活 + 卸载：工具随插件摘除
         registry.activate("sample-tools");
+        // 幂等：REST/脚本重复 activate 不应报错（自动装载已激活场景）
+        registry.activate("sample-tools");
+        assertEquals(PluginLifecycleState.ACTIVE, registry.runtimeState("sample-tools"));
         assertNotNull(toolRegistry.list().stream()
                 .filter(t -> t.name().startsWith("plugin__sample-tools__")).findFirst().orElse(null));
         registry.uninstall("sample-tools");

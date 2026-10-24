@@ -46,7 +46,8 @@ metadata:
 
 ## 3. 生成插件工程
 
-以 `jnf-harness/plugins/sample/` 为模板复制改造（比从零写快）。演示插件按**第三方独立工程**处理，放仓库外的工作区目录：
+以 `jnf-harness/plugins/sample/` 为模板复制改造（比从零写快）。演示插件按**第三方独立工程**处理，放在仓库外的独立目录
+（默认 `<workspace>/plugins/<pluginId>/`，也可由用户指定任意路径；本技能不要求工程必须在工作区内）：
 
 ```
 <workspace>/plugins/<pluginId>/
@@ -62,7 +63,12 @@ metadata:
 - **不加入** jnf-harness 的 Maven reactor（根 `pom.xml` 不登记）；只有确定要随宿主发布的官方插件，才移入
   `jnf-harness/plugins/<短名>/` 并加进根 `<modules>`；
 - 依赖：`jnf-harness-types`（`scope=provided`）+ `slf4j-api`（provided）；SDK 版本 `SdkVersion.CURRENT=1`；
-- 若生成器选择把工程放在别处（无 `jnf-harness` 同级），则**去掉 parent**，给 `jnf-harness-types` 显式写
+- **插件自有依赖必须打包**：宿主 ClassLoader 不共享第三方库；需要 JDBC 驱动/模板引擎等时，用 `maven-shade-plugin`
+  打成胖 JAR（保留 `META-INF/services`），否则运行期 `NoClassDefFoundError`；
+- **工具命名空间**：默认注册为 `plugin__<id>__<tool>`；若技能/命令模板里用裸工具名（如 `db_query`），在
+  `plugin.yaml` 写 `toolNamespace: global`，并保证全局唯一；
+- **插件数据目录**：宿主不提供；用配置项（如 `dataDir`，默认 `~/.<plugin>`）+ 绝对路径，避免依赖进程 cwd；
+- 若生成器选择把工程放在别处（`jnf-harness` 不在同级），则**去掉 parent**，给 `jnf-harness-types` 显式写
   `<version>0.1.0-SNAPSHOT</version>`，slf4j-api 用 2.0.x，二者均 `provided`；
 - 插件类继承 `AbstractHarnessPlugin`，构造传 pluginId；`tools()` 返回工具，`configure(ctx)` 里注册提示词/端点/Hook；
 - 每次请求的工具数据：直接放插件内存 `Map`（进程内重启即还原），演示足够；不要读数据库。
@@ -142,12 +148,16 @@ cp target/<pluginId>-*.jar <workspace>/jnf-harness/jnf-harness-app/target/plugin
 
 ```bash
 # 目录扫描 → 安装 → 激活（agent 用 curl/shell 工具执行）
-curl -s localhost:8090/api/harness/plugins/catalog
+curl -s localhost:8090/api/harness/plugins/catalog          # 目录里的插件默认已自动装载
 curl -s -X POST localhost:8090/api/harness/plugins/install -H "Content-Type: application/json" \
   -d '{"pluginId":"demo-redis-monitor","displayName":"Redis 监控台","pluginVersion":"1.0.0","runtimeType":"JAVA_NATIVE","sourcePath":"demo-redis-monitor-1.0.0.jar","entrypoint":"com.jnf.harness.demo.redis.RedisMonitorPlugin"}'
 curl -s -X POST localhost:8090/api/harness/plugins/activate -H "Content-Type: application/json" -d '{"pluginId":"demo-redis-monitor"}'
 curl -s localhost:8090/api/harness/plugins/demo-redis-monitor/contributions   # 一屏核对注册了什么
 ```
+
+- **自动装载**：插件放进目录后启动即 ACTIVE（catalog 里 `installed=true`）；`activate` 幂等，脚本可无脑重试；
+- **免模型自检**：给插件加 `POST /api/harness/plugins/{id}/api/selftest` 端点，一次跑通所有工具并返回每步结果；
+  排障顺序：`contributions` → `health` → `selftest` → 模型对话。
 
 桌面端：重启后端进程后，在「设置 → 插件」点刷新/重载插件 UI 即可看到工具卡与配置页；改完 `plugin-ui.json` 用「重载插件 UI」免重启。
 替换 jar 后调 `POST /api/harness/plugins/{id}/reload`。
@@ -160,6 +170,7 @@ curl -s localhost:8090/api/harness/plugins/demo-redis-monitor/contributions   # 
 - [ ] 写操作被明确标注“需确认”，确认前不落数据；
 - [ ] 配置页能保存并生效（改默认值后工具行为跟着变）；
 - [ ] `/命令` 能插入模板并触发正确工具；
+- [ ] 插件自带 `selftest` 端点在宿主里全部通过（免模型即可验收）；
 - [ ] 无密钥、无本机路径、无真实生产数据。
 
 ## 7. 排障速查

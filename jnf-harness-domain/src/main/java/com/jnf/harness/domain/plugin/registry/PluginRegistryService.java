@@ -90,9 +90,14 @@ public class PluginRegistryService {
         return artifact.toString();
     }
 
-    /** 激活（加载 + 注册工具/提示词/Hook）；按 runtimeType 走 Java / Node 通道。 */
+    /** 激活（加载 + 注册工具/提示词/Hook）；按 runtimeType 走 Java / Node 通道。已激活时幂等返回。 */
     public void activate(String pluginId) {
         PluginInstallationEntity record = require(pluginId);
+        if (pluginHost.stateOf(pluginId) == PluginLifecycleState.ACTIVE) {
+            // 幂等：auto-load 已激活的插件再次调用 activate 不报错（REST/脚本可安全重试）
+            repository.updateStatus(pluginId, PluginLifecycleState.ACTIVE.name());
+            return;
+        }
         boolean nodeBridge = RUNTIME_NODE_BRIDGE.equalsIgnoreCase(record.runtimeType());
         Path artifact = resolveSource(record.sourcePath());
         if (artifact == null || !Files.exists(artifact)) {
