@@ -68,4 +68,29 @@ class WebConsoleIntegrationTest {
         assertTrue(messages.getBody().contains("回放测试"), messages.getBody());
         assertTrue(messages.getBody().contains("控制台回放内容"), messages.getBody());
     }
+
+    @Test
+    @DisplayName("CORS 预检：JSON POST 必须返回 Allow-Methods/Headers（桌面 tauri 源直连）")
+    void cors_preflight_allows_json_post() throws Exception {
+        java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+        java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create("http://127.0.0.1:" + port + "/api/agent/stream"))
+                .method("OPTIONS", java.net.http.HttpRequest.BodyPublishers.noBody())
+                .header("Origin", "http://tauri.localhost")
+                .header("Access-Control-Request-Method", "POST")
+                .header("Access-Control-Request-Headers", "content-type")
+                .build();
+        java.net.http.HttpResponse<Void> response =
+                client.send(request, java.net.http.HttpResponse.BodyHandlers.discarding());
+        assertEquals(200, response.statusCode());
+        assertEquals(java.util.Optional.of("http://tauri.localhost"),
+                response.headers().firstValue("access-control-allow-origin"));
+        assertTrue(response.headers().firstValue("access-control-allow-methods").orElse("").contains("POST"),
+                "预检必须允许 POST，实际：" + response.headers().firstValue("access-control-allow-methods"));
+        assertTrue(response.headers().firstValue("access-control-allow-headers").orElse("")
+                        .toLowerCase().contains("content-type"),
+                "预检必须允许 content-type，实际：" + response.headers().firstValue("access-control-allow-headers"));
+        assertEquals(java.util.Optional.of("true"),
+                response.headers().firstValue("access-control-allow-private-network"));
+    }
 }
