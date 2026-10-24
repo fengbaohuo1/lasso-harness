@@ -26,6 +26,7 @@ node <skill-path>\scripts\delivery_check.mjs --base http://127.0.0.1:8090 --plug
 | 6 | 信封合规 | 管理端点返回 `{code,info,data}`，成功 `00000` |
 | 7 | 鉴权回归（若开了 API Key） | 不带 key → 401；带 key → 200；**应用代理 SSE 仍通** |
 | 8 | 端口正确 | 实际监听 = 约定端口（显式 `--server.port`，不吃环境变量） |
+| 9 | 产品端口（仅独立产品模式） | 18100 `/actuator/health`=UP、18081 首页 200，且监听进程命令行含产品根路径（不是开发底座） |
 
 **探活红线**：写进交付说明的地址必须是**刚刚**探活过的；进程被回收就重新拉起再交付，禁止照抄历史地址。
 
@@ -97,3 +98,27 @@ node <skill-path>\scripts\delivery_check.mjs --base http://127.0.0.1:8090 --plug
 2. 用户明确验收通过前任务不算完结；
 3. 反馈迭代：小改重跑受影响工具 + 探活 + 触及的 UI 区块；大改（新增工具/改数据模型/改全局机制）重走设计确认 + 全链路验证 + 本清单；
 4. 每次迭代同步更新 README 的工具清单与体验流程，禁止文档与实际能力脱节。
+
+## 九、独立产品打包附加项（仅独立产品模式）
+
+开发共享底座模式跳过本节。交付物是**独立产品**（自带 runtime、harness 18100、应用 18081、独立 `data/`）时逐条打勾；
+规则、脚本与升级备份见 `references/product-packaging.md`，启停模板见 `templates/app-plugin/`。
+
+```powershell
+# 产品两个端口刚探活（写进 README 的地址必须是刚探过的）
+Invoke-RestMethod http://127.0.0.1:18100/actuator/health                      # {"status":"UP"}
+(Invoke-WebRequest http://127.0.0.1:18081/ -UseBasicParsing).StatusCode       # 200
+# 插件与工具面（带产品 key；不带 key 应 401）
+Invoke-RestMethod http://127.0.0.1:18100/api/harness/plugins -Headers @{ 'X-API-Key' = '<key>' }
+node <skill-path>\scripts\delivery_check.mjs --base http://127.0.0.1:18100 --api-key <key> --plugin <pluginId> --app-url http://127.0.0.1:18081
+```
+
+- [ ] **runtime 齐全且可追溯**：`runtime/` 有 `jnf-harness-app.jar`、`plugins/<plugin>.jar`、`app/<app>.jar`；`runtime/VERSION.txt` 记了版本 + sha256，`Get-FileHash` 对得上
+- [ ] **data 隔离**：`data/` 启动后自动生成；产品目录外无新写入（`Get-ChildItem $env:USERPROFILE\.jnf` 不应出现本产品目录，插件不得写 `~/.<plugin>`）
+- [ ] **18100/18081 探活**：harness 健康 UP、应用首页 200；监听进程确属本产品（`Get-NetTCPConnection -LocalPort 18100,18081 -State Listen` 后核对命令行含产品根）
+- [ ] **start 幂等**：连续跑两次 `scripts/start.ps1`，第二次输出「复用」，`Get-Process java` 不新增进程
+- [ ] **stop 释放端口**：`scripts/stop.ps1` 后 18100/18081 都不在 Listen，`data/runtime.json` 标记 `STOPPED`
+- [ ] **API Key 注入**：无 key 调管理端点 401；带 key 200；应用内 AI 面板仍能流式；前端源码搜不到 key
+- [ ] **备份说明**：README 写了 `data/` 备份/恢复步骤（先停进程再复制）与升级/回滚方式（jar 与 data 成对）
+- [ ] **README 四件套 + runtime 来源 + 数据目录**：使用说明、体验流程、工具清单、生命周期 + runtime 从哪来（构建/分发包 + 版本 + sha256）+ 数据目录说明 + 启停命令
+- [ ] **换机器演练**：只装 JDK 17 的机器上解压 → `start.ps1` → 打开应用地址可用（交付前真做一遍，别假设）

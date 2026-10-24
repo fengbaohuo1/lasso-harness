@@ -30,7 +30,7 @@ metadata:
 
 用户说「help / 能做什么 / 没想好」时先按 `references/case-library.md` 的「帮助菜单」回复（一句话能力 + 分类菜单 + 引导），不要直接抛二选一。
 
-**可默认、不必问**：端口 18081 起顺延（底座固定 8090）；内存预置数据（重启即还原）；原生 HTML/CSS/JS 单页；包名 `com.jnf.<domain>`。
+**可默认、不必问**：端口 18081 起顺延（底座固定 8090；独立产品 harness 用 18100）；内存预置数据（重启即还原）；原生 HTML/CSS/JS 单页；包名 `com.jnf.<domain>`；交付形态默认「开发共享底座」，用户说交付/部署/独立运行时按第 9 节打成独立产品。
 
 ## 1. 交付定义（缺一不算交付）
 
@@ -38,7 +38,8 @@ metadata:
 - **插件**：`plugin.yaml` + SPI + `AbstractHarnessPlugin`，状态 ACTIVE，`/contributions` 能看到全部工具；
 - **每个工具至少一条自然语言实测**：`step_break.toolName` 正确、`tool_result` 非空、回答数字与工具返回一致；
 - **README + 体验流程 + 生命周期说明**（模板见 `references/delivery-template.md`）；
-- **设计语言卡**（主色/材质/形状母题/标志性元素/气质词）随 README 交付。
+- **设计语言卡**（主色/材质/形状母题/标志性元素/气质词）随 README 交付；
+- **独立产品形态（生产/交付推荐）**：产品目录自带 `runtime/`（harness jar + 插件 jar + 应用 jar + `VERSION.txt`）、`data/`、`scripts/start.ps1|stop.ps1`；一条命令起完整产品，端口（harness 18100 / 应用 18081）与数据与开发共享底座隔离。用户要交付/部署/独立运行时必须给，规则见第 9 节与 `references/product-packaging.md`。
 
 ## 2. 阶段 0：澄清三形态
 
@@ -144,13 +145,52 @@ node <skill-path>\scripts\agent_stream.mjs --base http://127.0.0.1:8090 --agent 
 
 ## 8. 阶段 6：交付文档与验收闭环
 
-1. 按 `references/delivery-template.md` 写 README（使用说明/体验流程/工具清单/数据说明/构建启动/坑位）；
+1. 按 `references/delivery-template.md` 写 README（使用说明/体验流程/工具清单/数据说明/构建启动/坑位）；**独立产品模式还要写清 runtime 来源（构建/分发包 + 版本 + sha256）与数据目录**；
 2. 过 `references/delivery-checklist.md`：自动项 + 手工项逐条打勾；
 3. 交付时给：探活后的应用地址、插件与工具清单、体验流程说明（每条示例问题注明触发哪个工具）、**服务生命周期说明**（跑在哪、进程可能被回收、重启命令、内存数据重启还原）；
 4. 交付后**主动索要验收反馈**（「打开地址过一遍体验流程，要调的告诉我」），用户确认前任务不算完结；
 5. 迭代：小改只重跑受影响工具 + 探活；改全局机制（Filter/拦截器/统一异常）要跑回归矩阵（页面流、AI 代理 SSE、Agent 端到端）。
 
-## 9. 硬规则（违反即重做）
+## 9. 独立产品打包（生产推荐）
+
+开发/联调用共享底座（8090）迭代；**交付给用户时打成独立产品**：一个目录、自带运行时、专用端口、独立数据，一条命令起停。
+完整规则（目录树、脚本逐参数说明、验收清单）读 `references/product-packaging.md`；脚本模板在 `templates/app-plugin/{start.ps1,stop.ps1,start.sh,RUNTIME.md}`。
+
+**目录布局**：
+
+```text
+<product>/
+├─ scripts/start.ps1 | stop.ps1 | start.sh   # 一键启停（幂等、只停自己）
+├─ runtime/jnf-harness-app.jar + plugins/<plugin>.jar + app/<app>.jar + VERSION.txt
+├─ data/    (harness/ H2、events/、<plugin>/、runtime.json)
+├─ logs/    (harness.log、harness.err.log、app.log、app.err.log)
+└─ README.md
+```
+
+**与开发共享底座的取舍**：共享底座零成本（开发期默认），但数据/插件/端口与所有项目混用、换机器要整个仓库 + Maven；独立产品自带 runtime、删 `data/` 即重置、换机器只要 JDK 17，代价是多一份约 30MB 二进制和启停脚本要维护。判定：用户说「交付 / 部署 / 独立运行 / 别依赖你的仓库 / 生产」→ 独立产品；否则默认共享底座，并在交付说明里写清「当前依赖 8090」。
+
+**内置 runtime 的来源**（优先构建，其次分发包，最后才下载）：
+- 源码构建：`mvn -o -B -DskipTests package` → 拷 `jnf-harness-app/target/jnf-harness-app.jar`；
+- 分发目录（推荐）：`node <harness>/scripts/package-local.mjs` → 复制 `dist/jnf-harness-local/`（jar + `plugins/` + `plugin-sdk/` + start 脚本）；
+- 官方发布包。**30MB jar 不进版本库**（`.gitignore`），版本写 `runtime/VERSION.txt`（版本 + sha256）。
+
+**数据隔离四项**（全走启动参数 + 工作目录，不改 jar）：
+1. `--spring.datasource.url=jdbc:h2:file:<product>/data/harness/jnf-harness;MODE=MySQL;CASE_INSENSITIVE_IDENTIFIERS=TRUE`；
+2. `--harness.events.dir=<product>/data/events`；
+3. 插件 `dataDir`：`PUT /api/harness/plugins/{id}/config` 写到 `<product>/data/<plugin>`（插件侧 `getConfig("dataDir")` 读写，宿主不提供默认目录）；
+4. 进程 cwd = 产品根（`./data/skills.properties`、`./data/secrets.json`、`./data/attachments` 才会落在产品内）。
+
+**端口与 API Key**：产品 harness **18100**、应用/BFF **18081**（多产品 18110/18082…；开发共享底座仍是 8090），启动一律显式 `--server.port=`。Key 由 start 脚本生成（或 `-ApiKey` 传入），harness 用 `--harness.auth.api-keys=<key>`、应用用 `--harness.api-key=<key>` 由 BFF 注入；浏览器不接触 key，`data/runtime.json` 存 key（gitignore，勿外传）。
+
+**一键启停**（幂等 + 只停自己）：
+- `start.ps1`：jar 检查 → 端口检查 → 起 harness → 健康探活 → install/activate 插件 → 写插件配置（`app.base-url`/`dataDir`）→ 校验 contributions → 起应用 → 首页 200 → 写 `data/runtime.json` → 打印地址；harness/应用**已健康则复用**，不重复起；
+- `stop.ps1`：读 `data/runtime.json` 的 PID，`Get-CimInstance Win32_Process` 校验「java + 命令行含产品路径」才 kill（PID 复用时不误杀），停完确认 18100/18081 不再 Listen。
+
+**升级与备份**：停 → 备份 `data/` → 替换 `runtime/*.jar` + 更新 `VERSION.txt` → start → 复验（健康/插件 ACTIVE/contributions/应用 AI 流式）；插件也可热换（替换 jar → `POST /api/harness/plugins/{id}/reload`）。回滚必须 jar 与 data 成对（无 Flyway，跨版本可能缺列）。
+
+**验收四问**：18100/18081 都刚探活过？产品目录外无新写入（尤其 `~/.jnf`）？start 连跑两次不新增进程？stop 后端口真的释放？→ 逐条过 `references/product-packaging.md` §9 与 `references/delivery-checklist.md`「独立产品附加项」。
+
+## 10. 硬规则（违反即重做）
 
 1. **AI 面板必须代理 harness stream**：浏览器只访问应用域，API Key 只存在应用服务端；
 2. **markdown 必须渲染且先转义**：AI 气泡禁止 `textContent` 裸显，先 `escapeHtml` 再处理标题/加粗/列表/代码块，流式逐 chunk 重渲染；用户气泡用 `textContent`；
@@ -160,10 +200,11 @@ node <skill-path>\scripts\agent_stream.mjs --base http://127.0.0.1:8090 --agent 
 6. **禁止把工具卡当平台 UI**：应用自己的业务界面自己画；`plugin-ui.json` 只是宿主里的附加展示，不是本交付的主界面；
 7. **先设计稿后写码**：实体/工具/页面/数据四块给用户确认；
 8. **数字只来自工具**：AI 回答与前端的数值都必须能追到应用 REST/工具返回，禁止现编；
-9. **端口显式**：底座 `--server.port=8090`、应用 `--server.port=18081`（起服务一律带参）；
-10. **不写密钥、不写本机绝对路径**：示例用 `<key>` / `<workspace>` / `<skill-path>`。
+9. **端口显式**：底座 `--server.port=8090`、应用 `--server.port=18081`、独立产品的 harness `--server.port=18100`（起服务一律带参）；
+10. **不写密钥、不写本机绝对路径**：示例用 `<key>` / `<workspace>` / `<skill-path>`；
+11. **独立产品交付必须自带 runtime**：`runtime/` 三件 jar + `VERSION.txt` 齐全；start/stop 幂等且只停自己的进程；数据/端口与开发底座隔离；README 写清 runtime 来源与数据目录（见第 9 节）。
 
-## 10. Gotchas
+## 11. Gotchas
 
 - **未配模型**：对话报错先查「设置 → 模型」，不是插件问题；
 - **插件改了配置不生效**：`getConfig` 即用即读，但应用地址若在 `configure()` 缓存，需 `reload` 插件；
@@ -172,11 +213,13 @@ node <skill-path>\scripts\agent_stream.mjs --base http://127.0.0.1:8090 --agent 
 - **SSE 字段是字符串**：`step_break.args`、`tool_result.result` 是 JSON 字符串（要 `JSON.parse`），`tool_result.error` 是布尔，`done.toolCalls` 是数量（数字）；
 - **CORS**：底座 `allowedOriginPatterns("*")` 但不带凭据；应用代理走服务端就没 CORS 问题——优先服务端代理；
 - **H2 与数据目录**：用默认 `MODE=MySQL` 的 H2 连接串，别自造方言；`./data` 相对进程 cwd，换目录起会像「数据丢了」；
+- **产品与共享底座共用数据**：两个进程打开同一份 H2 会报 `Database may be already in use`；独立产品必须用自己的 `data/` 与 18100 端口；
+- **start 脚本重复执行**：靠健康接口判断复用，不要手工 taskkill 后再起；重启一律先 `stop.ps1` 再 `start.ps1`；
 - **Windows/PowerShell 引号**：JSON body 用 `@{} | ConvertTo-Json` 或单引号包 JSON，双引号嵌套会炸；
 - **代理导致本机 curl 502**：先 `Get-NetTCPConnection -LocalPort <port> -State Listen` 确认在听，再判断是不是代理。
 - 更多实测坑位与排查配方：`references/runtime-pitfalls.md`。
 
-## 11. references 索引（按需读，别一次全读）
+## 12. references 索引（按需读，别一次全读）
 
 | 文件 | 何时读 |
 | --- | --- |
@@ -188,15 +231,16 @@ node <skill-path>\scripts\agent_stream.mjs --base http://127.0.0.1:8090 --agent 
 | `references/runtime-pitfalls.md` | 启动/联调出问题，或进入沙箱/受限代理环境前 |
 | `references/case-library.md` | 用户说 help、没想好做什么、要案例或要写新案例 prompt 时 |
 | `references/delivery-template.md` | 写 README、体验流程、生命周期说明时 |
+| `references/product-packaging.md` | **交付为独立产品时必读**：自带 runtime、18100/18081、数据隔离、API Key、启停与升级验收 |
 
-## 12. 与相邻技能的边界
+## 13. 与相邻技能的边界
 
 - 插件怎么写、`plugin.yaml` 字段、Hook/Endpoint/配置、报错对照 → `jnf-harness-plugin-dev`（本技能不重复）；
 - 只要「Agent 为主体、界面由宿主 `plugin-ui.json` 渲染」的演示 → `jnf-harness-demo-app`；
 - 底座怎么构建/启动/排障（端口、鉴权、数据目录、模型渠道） → `jnf-harness-ops`；
 - 本技能 = **应用自己画界面 + AI 嵌在应用里 + 插件只做桥**。
 
-## 13. 自检清单
+## 14. 自检清单
 
 - [ ] frontmatter `name` = 目录名；description 有触发场景与产出物
 - [ ] 设计稿已确认；预置数据无「示例/测试/A 商品」式占位
@@ -205,3 +249,4 @@ node <skill-path>\scripts\agent_stream.mjs --base http://127.0.0.1:8090 --agent 
 - [ ] 插件 ACTIVE、`/contributions` 工具齐全、每个工具至少一条自然语言实测
 - [ ] 写操作先确认、有回显、可重启还原
 - [ ] UI 真浏览器点过；README/体验流程/生命周期齐备；地址刚探活
+- [ ] （独立产品）`runtime/` 三件 jar + `VERSION.txt`、`data/` 隔离、18100/18081 探活、start 幂等、stop 释放端口、README 含 runtime 来源与数据目录

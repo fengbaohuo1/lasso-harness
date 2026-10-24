@@ -9,6 +9,9 @@
 app-plugin/
 ├─ pom.xml                      # 聚合 POM（Java 17，Spring Boot 3.3.5 BOM）
 ├─ TEMPLATE.md                  # 本文件
+├─ start.ps1 / stop.ps1         # 独立产品一键启停（复制到 <product>/scripts/，见 §9）
+├─ start.sh                     # Linux/macOS 启动骨架（与 start.ps1 等价）
+├─ RUNTIME.md                   # runtime jar 从哪来、为何不入库、升级步骤
 ├─ sample-app/                  # 业务应用
 │  ├─ pom.xml
 │  └─ src/main/
@@ -152,3 +155,19 @@ node <skill-path>/scripts/delivery_check.mjs --plugin demo-bridge --app-url http
 - 不做认证/权限/数据库：本骨架只为打通「应用 ↔ 插件 ↔ Agent」链路，业务安全按项目需求自己加。
 - `index.html` 的 SSE 解析是**最小演示**（chunk 累积 + 工具轨迹 + 错误提示）；markdown 渲染、AbortController、去重后的工具卡等完整实现见技能正文与 `references/`。
 - 插件只调应用 REST，不直连数据库；应用 REST 是唯一数据源，页面与工具口径必须一致。
+
+## 9. 独立产品化（交付/生产推荐）
+
+开发期用共享底座（8090）就行；**交付给用户**时打成独立产品：自带 runtime、专用端口 18100、独立 `data/`，一条命令起停。
+
+1. 建产品目录并建三个子目录：`scripts/`、`runtime/`、`data/`（`logs/` 首次启动自动建）；
+2. 复制 `start.ps1`、`stop.ps1`（Linux 加 `start.sh`）到 `<product>/scripts/`；
+3. 按 `RUNTIME.md` §1 把三个 jar 放到 `runtime/`：`jnf-harness-app.jar`、`plugins/sample-plugin.jar`、`app/sample-app.jar`；
+4. 改 `start.ps1` 顶部「本产品参数」：`$PluginId` / `$PluginEntrypoint` / 三个 jar 名（与 §6 改名清单一致）；
+5. 跑 `pwsh -NoProfile -File scripts/start.ps1`：起 harness → 装插件 → 写插件配置 → 起应用 → 探活 → 打印地址，
+   并把端口/PID/地址/API Key 写入 `data/runtime.json`；
+6. 验收：`http://127.0.0.1:18100/actuator/health` = UP、`http://127.0.0.1:18081/` = 200、插件 ACTIVE；
+   再连跑一次 start（应显示「复用」），最后 `stop.ps1` 确认两个端口都释放。
+
+规则与原因（数据隔离四项、端口规划、`runtime.json` 含 key、升级/备份/回滚）见技能 `references/product-packaging.md`；
+模板脚本的注释里逐段写了每个参数与失败提示。骨架已在 `bash -n` 下检查语法，但 `start.sh` 未在 Windows 实跑完整链路，首次使用按输出逐步验证。

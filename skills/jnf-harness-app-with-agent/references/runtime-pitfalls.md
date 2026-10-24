@@ -124,3 +124,18 @@ Invoke-RestMethod http://127.0.0.1:8090/actuator/health
 6. **验代理**：`curl -N POST /api/assistant/stream` 是否有 `event: meta/chunk/done`；
 7. **验 UI**：真浏览器点，ConSOLE 有没有 JS 报错；
 8. 仍不通：清代理环境变量、重启两个进程，再看日志（底座日志只到 stdout，桌面壳写 `agent.log`）。
+
+## 13. 独立产品模式专用坑位
+
+打包成「自带 runtime + 18100/18081 + 独立 data」后新出现的坑（规则见 `references/product-packaging.md`）：
+
+| 现象 | 原因 | 处理 |
+| --- | --- | --- |
+| 产品启的是 8090、读到开发底座的数据 | 沿用旧启动命令或环境变量 `SERVER_PORT`/`SPRING_DATASOURCE_URL` 把端口/库带偏 | 启动脚本**显式**传 `--server.port=18100` 与 `--spring.datasource.url=jdbc:h2:file:<product>/data/harness/...`；起后 `Get-NetTCPConnection` 核对端口，看 `/actuator/health` 的进程 PID 是否等于脚本记录 |
+| 产品端口冲突（18100 被占 / 应用 18081 被开发期应用占） | 机器上同时跑开发底座、多个产品、上一次没停的进程 | 查占用：`Get-NetTCPConnection -LocalPort 18100,18081 -State Listen \| Select-Object LocalPort,OwningProcess`；多产品按 +10（harness）/ +1（应用）错开；不要 kill 不认识 PID |
+| `Database may be already in use ... jnf-harness.mv.db` | 同一 `data/harness` 被两个进程打开（产品副本 + 开发底座共用 data，或旧进程未死） | 一个产品一份 `data/`，绝不与开发仓库共享；先 `stop.ps1` 再起；确认 `Get-Process java` 里只有一个用于该 `data/` 的进程 |
+| 产品目录外多出 `~/.jnf/skills`、`~/.<plugin>`、散落 `data/` | 进程 cwd 不是产品根，或插件用相对路径/用户目录写数据 | `Start-Process -WorkingDirectory <product>` / `cd <product>`；插件落盘一律 `getConfig("dataDir")`，启动脚本用 `PUT /api/harness/plugins/{id}/config` 写到 `<product>/data/<plugin>`；验收时检查 `$env:USERPROFILE\.jnf` 无新增 |
+| 30MB jar 分发/升级出问题（拷一半、版本混用、sha256 不符） | 手工拷贝中断、覆盖了不同版本、没记录版本 | `runtime/VERSION.txt` 记版本 + sha256，`Get-FileHash` 校验；升级先 `stop.ps1` 再整文件替换（不要边跑边覆盖），换完复验健康/插件 ACTIVE/contributions/应用 AI 流式；回滚要 jar 与 `data/` 成对 |
+| `start.ps1` 重复执行后两个实例/端口打架 | 上一实例没停、或健康检查误判（端口在听但服务没起好） | 脚本只按**健康接口**判复用；重置先 `stop.ps1`（校验 PID + 命令行）再 `start.ps1`；连续跑两次应看到第二次 `[SKIP]` 而不是新 PID |
+| `start.ps1` 中文乱码 / 报「字符串缺少终止符」 | Windows PowerShell 5.1 按 GBK 读 UTF-8 无 BOM 脚本；或复制脚本时混了全角引号 | 用 `pwsh`（PowerShell 7）执行；5.1 下把文件另存为 UTF-8 with BOM；语法自查：`$errs=$null; [System.Management.Automation.Language.Parser]::ParseFile($p,[ref]$null,[ref]$errs); $errs.Count` 必须为 0 |
+| `stop.ps1` 说「无 PID 记录 / 命令行不含产品路径」 | 启动时复用了外部已起进程（无 PID），或 PID 被系统复用 | 这是**保护**不是故障：复用进程需手工按端口/命令行确认后再停；确实归属本产品时可 `-Force`（仅限确认过） |

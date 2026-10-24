@@ -197,3 +197,18 @@ node <skill-path>\scripts\agent_stream.mjs --base http://127.0.0.1:8090 --agent 
 1. 地址**现在**能打开吗？（刚探活）
 2. 每个工具都有一条**实测过**的自然语言问法吗？（不是设计稿里的）
 3. README / 体验流程 / 生命周期三份都与实际代码一致吗？（工具数、端口、状态机）
+
+## 六、独立产品 README 增补（仅独立产品交付）
+
+交付物是「自带 runtime 的独立产品」时，README 必须**额外**写清下面四块（布局与脚本见 `references/product-packaging.md`，
+启停模板见 `templates/app-plugin/`；缺一块按未交付处理）：
+
+| 增补项 | 写什么 | 示例 |
+| --- | --- | --- |
+| runtime 来源 | 从哪构建/复制、版本、sha256、为什么不在仓库里 | 「runtime 由 `<harness>` 0.1.0-SNAPSHOT 执行 `mvn -o -B -DskipTests package` 产出，sha256 前 12 位 `a1b2c3d4e5f6`；jar 不入库，随交付包分发」 |
+| 数据目录 | H2、events、插件 dataDir、日志分别在哪，怎么重置 | 「全部在 `<product>/data/`：`harness/`（H2）、`events/`、`<plugin>/`（插件数据）、`runtime.json`；停进程删 `data/` 即重置」 |
+| 一键启停 | 命令、端口、幂等行为、怎么确认起来了 | 「`pwsh -NoProfile -File scripts/start.ps1`（harness 18100 / 应用 18081）；重复执行会复用；`scripts/stop.ps1` 停止」 |
+| 备份与回滚 | 备份哪个目录、什么时候备份、怎么回滚 | 「升级前 `stop.ps1` 后复制整个 `data/`；回滚 = 旧 jar + 旧 `data/` 成对替换」 |
+
+同时把「服务生命周期」里的端口从 8090/18081 改成产品的 18100/18081，并注明：
+**模型渠道配置、插件安装记录、会话都在 `data/` 里，换 data 相当于换一个全新实例。**
