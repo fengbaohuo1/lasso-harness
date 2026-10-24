@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.example.appplugin</groupId>
+    <artifactId>app-plugin-template</artifactId>
+    <version>1.0.0</version>
+  </parent>
+
+  <artifactId>sample-plugin</artifactId>
+  <name>sample-plugin</name>
+  <description>jnf-harness Java 插件：把应用 REST 桥接成 Agent 工具（demo_list_items）</description>
+
+  <dependencies>
+    <!-- 只依赖宿主契约包，provided：宿主运行时提供，绝不打进插件 JAR -->
+    <dependency>
+      <groupId>com.jnf.harness</groupId>
+      <artifactId>jnf-harness-types</artifactId>
+      <version>${jnf-harness-types.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <!-- 固定产物名：target/sample-plugin.jar（安装脚本按这个名字接收 jar） -->
+    <finalName>sample-plugin</finalName>
+  </build>
+</project>

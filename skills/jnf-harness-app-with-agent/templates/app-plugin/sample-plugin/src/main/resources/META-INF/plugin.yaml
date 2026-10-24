@@ -1,0 +1,7 @@
+id: demo-bridge
+name: Demo Bridge Plugin
+version: 1.0.0
+author: example
+description: 把示例应用的清单 REST 桥接成 demo_list_items 工具（应用+插件最小骨架）。
+entrypoint: com.example.appplugin.plugin.DemoBridgePlugin
+sdkVersion: 1

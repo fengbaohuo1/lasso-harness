@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  应用 + 插件最小骨架（Maven 多模块，Java 17）：
+  - sample-app    ：Spring Boot 业务应用（REST + 静态页 + AI 助手代理 /api/assistant/stream）
+  - sample-plugin ：jnf-harness Java 插件（把应用 REST 桥接成 Agent 工具）
+  先读同目录 TEMPLATE.md 的「构建前置」（需要本地仓库已有 jnf-harness-types）。
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.example.appplugin</groupId>
+  <artifactId>app-plugin-template</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+  <name>app-plugin-template</name>
+  <description>「应用为主体 + 内嵌 AI 助手 + 插件桥接」最小可运行骨架</description>
+
+  <modules>
+    <module>sample-app</module>
+    <module>sample-plugin</module>
+  </modules>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+    <spring-boot.version>3.3.5</spring-boot.version>
+    <!-- 与本地 jnf-harness 仓库版本保持一致；换版本用 -Djnf-harness-types.version=x.y.z -->
+    <jnf-harness-types.version>0.1.0-SNAPSHOT</jnf-harness-types.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <!-- 固定版本，离线仓库可直接命中；release=17 由属性 maven.compiler.release 提供 -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.13.0</version>
+          <configuration>
+            <release>17</release>
+            <encoding>UTF-8</encoding>
+          </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>3.4.1</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-resources-plugin</artifactId>
+          <version>3.3.1</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.2.5</version>
+        </plugin>
+        <plugin>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-maven-plugin</artifactId>
+          <version>${spring-boot.version}</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

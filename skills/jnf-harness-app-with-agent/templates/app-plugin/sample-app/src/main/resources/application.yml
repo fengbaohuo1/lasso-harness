@@ -1,0 +1,20 @@
+server:
+  port: 18081
+
+spring:
+  application:
+    name: sample-app
+  mvc:
+    # SSE 代理是长连接：默认 30s 异步超时会掐断流，置 -1 表示不限
+    async:
+      request-timeout: -1
+
+harness:
+  # 底座地址。换环境用环境变量 HARNESS_BASE_URL，不要把地址写死进前端。
+  base-url: ${HARNESS_BASE_URL:http://127.0.0.1:8090}
+  # 底座设了 harness.auth.api-keys 才需要；只存在服务端，不下发浏览器、不入库明文。
+  api-key: ${HARNESS_API_KEY:}
+
+logging:
+  level:
+    com.example.appplugin: INFO

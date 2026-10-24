@@ -23,18 +23,28 @@ skills/
 │       ├── case-redis-monitor.md
 │       ├── case-release-monitor.md
 │       └── case-dev-collab.md
+├── jnf-harness-app-with-agent/                 # 应用为主体 + 内嵌 AI 助手（应用 + 插件轨道）
+│   ├── SKILL.md
+│   ├── references/                             # 架构 / AI 面板 / UI 指南 / 交付清单 / 案例库 / 坑位
+│   ├── scripts/                                # check_env / start_harness / install_plugin / agent_stream / smoke / delivery
+│   └── templates/app-plugin/                   # Spring Boot 应用 + 插件 bridge 最小骨架
 └── skill-authoring/
     └── SKILL.md
 ```
 
-## 四个技能
+## 五个技能
 
 | 技能 | 定位 | 典型触发 |
 | --- | --- | --- |
 | `jnf-harness-plugin-dev` | 给 jnf-harness **写 Java 插件**：SPI 选型、工具注册、`plugin.yaml`、Hook/`Endpoint`/配置、打包与安装 | “写一个插件”“注册新工具”“plugin.yaml 怎么写”“插件热重载” |
 | `jnf-harness-ops` | 本地**构建、启动与运维**：端口/鉴权/模型渠道/数据目录/技能与插件目录/故障排查 | “启动失败”“端口占用”“401”“配置模型渠道”“data 在哪” |
-| `jnf-harness-demo-app` | 把**一句话业务需求**做成可点击插件应用：需求深挖卡 → 工具契约 → `plugin-ui.json` → 打包安装激活 → 验收；含 Redis 监控 / 发布监控 / 迭代协作 3 个即用案例 | “做一个 XX 管理台/监控台/工作台”“按 P28 做一个” |
+| `jnf-harness-demo-app` | **Agent 为主体**的插件应用：一句话需求 → 工具契约 → `plugin-ui.json`（工具卡/配置页/命令/提及）→ 安装验收；含 3 个案例 | “做一个 XX 管理台/监控台/工作台”“按 P28 做一个” |
+| `jnf-harness-app-with-agent` | **应用为主体 + 内嵌 AI 助手**：独立业务应用（前端 + REST）+ AI 面板代理 harness SSE + 插件桥接应用 API；含案例库、脚本、模板与交付清单 | “做一个 XX 平台/系统”“应用里带 AI 助手”“已有应用接入 AI” |
 | `skill-authoring` | **写合规技能包**：frontmatter、命名、描述、渐进式披露、references/scripts、自检清单 | “新增一个技能”“技能没被发现”“技能怎么写” |
+
+> **形态选择**：`jnf-harness-demo-app` 产出“插件”（界面由宿主渲染，Agent 是主体）；
+> `jnf-harness-app-with-agent` 产出“应用”（界面由应用自己实现，AI 嵌在应用里，插件只做桥）。
+> 需要人操作业务系统、AI 只是助手时选后者；只想要 Agent 能力包时选前者。
 
 > `jnf-harness-demo-app` 的 3 个案例是**演示应用**（预置数据、不接真实系统），设计卡在 `references/case-*.md`；
 > 生成物建议放仓库外的 `demo-plugins/<pluginId>/`，构建后把 jar 放进宿主插件目录。

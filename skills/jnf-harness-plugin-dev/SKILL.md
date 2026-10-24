@@ -302,6 +302,8 @@ public void configure(PluginContext context) {
 
 ## 9. 第三方插件实战要点（2026-10，db-manager 验证）
 
+- **应用桥接形态**：如果插件只是“应用 API ↔ Agent 工具”的桥（应用自带前端/后端），先看 `jnf-harness-app-with-agent`；
+  插件通过 HTTP 调应用 REST（超时/异常分类/脱敏），应用侧提供 `serviceToken`，插件配置里注入；不要把 DB/中间件连接直接放进插件。
 - **依赖隔离**：宿主 ClassLoader 只给 SDK + 日志门面，插件自己的库（JDBC 驱动、模板引擎等）不会共享；用 `maven-shade-plugin` 打成胖 JAR（`ServicesResourceTransformer` 保留 `META-INF/services`），否则运行期 `NoClassDefFoundError`。
 - **工具命名空间**：默认限定名 `plugin__<id>__<tool>`；想让工具以裸名注册（与技能文案/`plugin-ui.json`/斜杠模板一致）时，在 `plugin.yaml` 加 `toolNamespace: global`，并自行保证全局唯一。
 - **插件数据目录**：宿主不提供“插件数据目录”，相对路径取决于宿主进程 cwd。用配置项（如 `dataDir`，默认 `~/.<plugin>`）+ 绝对路径，别写死相对路径。

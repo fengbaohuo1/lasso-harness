@@ -58,6 +58,7 @@ class SkillsRuntimeIntegrationTest {
         assertTrue(names.contains("jnf-harness-plugin-dev"), names.toString());
         assertTrue(names.contains("jnf-harness-ops"), names.toString());
         assertTrue(names.contains("jnf-harness-demo-app"), names.toString());
+        assertTrue(names.contains("jnf-harness-app-with-agent"), names.toString());
         assertTrue(names.contains("skill-authoring"), names.toString());
         assertTrue(skills.stream().allMatch(SkillSummary::enabled), names.toString());
         assertTrue(skills.stream().allMatch(s -> !s.description().isBlank()), skills.toString());
@@ -93,5 +94,22 @@ class SkillsRuntimeIntegrationTest {
         assertTrue(java.nio.file.Files.isRegularFile(
                 java.nio.file.Path.of("../skills/jnf-harness-demo-app/references/case-redis-monitor.md")),
                 "case-redis-monitor.md 应存在");
+    }
+
+    @Test
+    @DisplayName("应用+助手技能：正文可加载并引用案例库/脚本/模板")
+    void loads_app_with_agent_skill() throws Exception {
+        ToolExecutionResult loaded = toolRegistry.lookup("skill").orElseThrow()
+                .execute(Map.of("name", "jnf-harness-app-with-agent"), ctx).get();
+        assertTrue(loaded.success(), loaded.content());
+        assertTrue(loaded.content().contains("<skill name=\"jnf-harness-app-with-agent\""), loaded.content());
+        assertTrue(loaded.content().contains("case-library.md"), loaded.content());
+        assertTrue(loaded.content().contains("ai-panel-guide.md"), loaded.content());
+        assertTrue(java.nio.file.Files.isRegularFile(
+                        java.nio.file.Path.of("../skills/jnf-harness-app-with-agent/scripts/agent_stream.mjs")),
+                "agent_stream.mjs 应存在");
+        assertTrue(java.nio.file.Files.isRegularFile(
+                        java.nio.file.Path.of("../skills/jnf-harness-app-with-agent/templates/app-plugin/pom.xml")),
+                "app-plugin 模板应存在");
     }
 }

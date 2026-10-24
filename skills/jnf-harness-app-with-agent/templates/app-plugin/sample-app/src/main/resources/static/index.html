@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>示例应用 · 内嵌 AI 助手</title>
+<style>
+  :root { --fg:#1f2430; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fa; --accent:#2563eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.65 system-ui, "Segoe UI", "Microsoft YaHei", sans-serif; color:var(--fg); background:var(--bg); }
+  header { padding:18px 22px; background:#fff; border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:18px; }
+  header p { margin:4px 0 0; color:var(--muted); font-size:13px; }
+  main { max-width:760px; margin:0 auto; padding:18px 16px 40px; }
+  #messages { min-height:220px; display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+  .msg { padding:10px 12px; border-radius:10px; white-space:pre-wrap; word-break:break-word; }
+  .msg.user { align-self:flex-end; background:var(--accent); color:#fff; max-width:80%; }
+  .msg.assistant { align-self:flex-start; background:#fff; border:1px solid var(--line); max-width:92%; }
+  .trace { display:block; margin-top:6px; color:var(--muted); font-size:12px; }
+  form { display:flex; gap:8px; }
+  #input { flex:1; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  button { padding:10px 18px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #hint { color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>示例应用</h1>
+  <p>界面由应用自己画；AI 助手经服务端 <code>/api/assistant/stream</code> 代理到 jnf-harness Agent（浏览器不持有 API Key）。</p>
+</header>
+<main>
+  <div id="messages" aria-live="polite"></div>
+  <form id="form">
+    <input id="input" placeholder="试试：列出示例应用里的全部条目并汇总库存" autocomplete="off">
+    <button id="send" type="submit">发送</button>
+  </form>
+  <p id="hint">提示：底座未配置模型渠道时，对话会返回 error 事件；先到 http://127.0.0.1:8090/ 的「设置 → 模型」添加渠道并测试。</p>
+</main>
+<script>
+(() => {
+  const messages = document.getElementById('messages');
+  const form = document.getElementById('form');
+  const input = document.getElementById('input');
+  const sendBtn = document.getElementById('send');
+
+  function append(role, text) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + role;
+    el.textContent = text;          // 用户/助手文本一律 textContent，防注入
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+    return el;
+  }
+
+  /** 解析单个 SSE 帧（event + data 行），keepalive 注释帧返回 null。 */
+  function parseFrame(raw) {
+    let event = 'message';
+    const data = [];
+    for (const line of raw.split('\n')) {
+      if (!line || line.startsWith(':')) continue;
+      const i = line.indexOf(':');
+      const field = i < 0 ? line : line.slice(0, i);
+      let value = i < 0 ? '' : line.slice(i + 1);
+      if (value.startsWith(' ')) value = value.slice(1);
+      if (field === 'event') event = value;
+      else if (field === 'data') data.push(value);
+    }
+    if (!data.length) return null;
+    return { event, data: data.join('\n') };
+  }
+
+  const safeJson = (text) => { try { return JSON.parse(text); } catch { return null; } };
+
+  async function send(text) {
+    append('user', text);
+    const bubble = append('assistant', '正在思考…');
+    let answer = '';
+    const traces = [];
+    sendBtn.disabled = true;
+
+    try {
+      const res = await fetch('/api/assistant/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n');
+        let idx;
+        while ((idx = buffer.indexOf('\n\n')) >= 0) {
+          const frame = parseFrame(buffer.slice(0, idx));
+          buffer = buffer.slice(idx + 2);
+          if (!frame) continue;
+          const payload = safeJson(frame.data);
+          if (!payload) continue;
+
+          if (frame.event === 'chunk') {
+            answer += payload.content || '';
+            bubble.textContent = answer;
+          } else if (frame.event === 'step_break') {
+            // step_break 可能重复推送：按 callId 去重后再展示
+            if (payload.callId && traces.includes(payload.callId)) continue;
+            traces.push(payload.callId || payload.toolName);
+            bubble.textContent = (answer || '正在调用工具…') + `\n[调用工具] ${payload.toolName || '?'}`;
+          } else if (frame.event === 'tool_result') {
+            bubble.textContent = (answer || '工具已返回…') + `\n[工具结果] ${payload.toolName || '?'}${payload.error ? '（失败）' : ''}`;
+          } else if (frame.event === 'error') {
+            answer += `\n[错误] ${payload.message || payload.code || '流式返回错误'}`;
+            bubble.textContent = answer.trim();
+          }
+          messages.scrollTop = messages.scrollHeight;
+        }
+      }
+      if (!answer.trim()) bubble.textContent = '（没有收到内容：检查底座模型配置）';
+    } catch (err) {
+      bubble.textContent = `请求失败：${err.message}（确认底座已在运行，且应用能访问它）`;
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    send(text);
+  });
+})();
+</script>
+</body>
+</html>
