@@ -50,6 +50,14 @@ public class ModelSettingService {
             } else {
                 apiKeyRef = secrets.putSecret("apiKey." + channelCode, apiKey.trim());
             }
+        } else if (apiKeyRef == null || apiKeyRef.isBlank()) {
+            // P11-3：省略 apiKey 且未带 apiKeyRef（管理端编辑表单留空）时，沿用库中既有密钥引用；
+            // 否则 upsert 会把 apiKeyRef 覆盖为空，等于静默清空密钥。
+            apiKeyRef = repository.findAll().stream()
+                    .filter(existing -> channelCode.equals(existing.channelCode()))
+                    .map(ModelSettingEntity::apiKeyRef)
+                    .findFirst()
+                    .orElse(null);
         }
         ModelSettingEntity normalized = new ModelSettingEntity(
                 channelCode, entity.displayName(), entity.providerCode(),

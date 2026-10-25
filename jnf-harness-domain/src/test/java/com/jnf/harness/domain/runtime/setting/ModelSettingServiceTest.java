@@ -91,6 +91,17 @@ class ModelSettingServiceTest {
     }
 
     @Test
+    @DisplayName("P11-3：编辑时省略 apiKey（apiKeyRef 空）应保留既有密钥，不能静默清空")
+    void save_without_api_key_keeps_existing_secret() {
+        service.save(entity("ch-keep", true), "sk-live");
+        ModelSettingEntity edit = new ModelSettingEntity("ch-keep", "渠道ch-keep", "openai", "model-x",
+                "http://localhost:1/v1", "", "openai", true, false);
+        service.save(edit, null);
+        assertTrue(service.hasApiKey("ch-keep"), "省略 apiKey 时不应清空密钥");
+        assertEquals("sk-live", service.resolveApiKey("ch-keep"));
+    }
+
+    @Test
     @DisplayName("激活：渠道不存在或已禁用 → 拒绝")
     void activate_guards() {
         service.save(entity("ch-off", false));
